@@ -1,10 +1,15 @@
 // src/games/dune-imperium/game.js
-
+import { LEADERS, getBasicLeaderIds } from './leaders.js';
+import { getAllImperiumCards, getAllIntrigueCards } from './cards.js';
 // Represents the main game state and logic for Dune: Imperium.
 
 class DuneImperiumGame {
   constructor(playerCount) {
     this.playerCount = playerCount;
+    if (playerCount > getBasicLeaderIds().length && playerCount > 1) { // Allow solo testing without enough unique leaders
+        // For simplicity in this example, we'll cycle. A real game might require unique leaders or error out.
+        // console.warn("Warning: Not enough unique basic leaders for all players. Leaders will be reused.");
+    }
     this.players = [];
     this.boardLocations = {}; // Will be populated by initializeBoardLocations
     this.decks = {
@@ -54,20 +59,26 @@ class DuneImperiumGame {
       const player = {
         id: i,
         name: `Player ${i + 1}`,
+        leader: null,
         agents: 2,
-        resources: { spice: 1, solari: 0, water: 1, persuasion: 0, swords: 0 }, // Add persuasion & swords for reveal phase
+        resources: { spice: 1, solari: 0, water: 1, persuasion: 0, swords: 0 },
         hand: [],
         discardPile: [],
         deck: this.getStartingDeck(),
-        playedCards: [], // Cards played for Agent turn
-        revealedCards: [], // Cards played for Reveal turn effects
-        intrigueCards: [], // Separate hand for intrigue cards
-        influence: {}, // { fremen: 0, beneGesserit: 0, ... }
-        factionAlliances: {}, // { fremen: false, ... } tracks if they have an alliance token
-        garrison: { count: 3 }, // Start with some troops in garrison
+        playedCards: [],
+        revealedCards: [],
+        intrigueCards: [], // Player's hand of Intrigue cards
+        playedIntrigueCards: [], // For tracking played Endgame intrigues
+        influence: {},
+        factionAlliances: {},
+        garrison: { count: 3 },
         activeCombatUnits: 0,
         victoryPoints: 0,
-        hasPassedReveal: false, // Flag for reveal phase completion
+        hasPassedReveal: false,
+        paulSignetActive: false,
+        paulTopCardInfo: null,
+        skipRecallAgentId: null,
+        pendingDecision: null, // For optional costs, targeting, troop deployment choices
       };
       factions.forEach(faction => {
         player.influence[faction] = 0;
@@ -75,17 +86,24 @@ class DuneImperiumGame {
       });
       this.players.push(player);
     }
+    const basicLeaderIds = getBasicLeaderIds();
+    this.players.forEach((player, index) => {
+        const leaderId = basicLeaderIds[index % basicLeaderIds.length]; // Cycle through leaders if more players than leaders
+        player.leader = { ...LEADERS[leaderId] }; // Assign a copy of the leader object
+        this.log(`Player ${player.name} is ${player.leader.name}`);
+    });
   }
 
   getStartingDeck() {
-    // Placeholder for starting deck cards with agentIcons
+    // Signet Ring card ID must be consistent for ability trigger
+    const SIGNET_RING_ID = "start_001_signet_ring";
     const startingCards = [
-      { id: "start_001", name: "Signet Ring", type: "Agent", agentIcons: ["Loyalty"], effect: "Use leader ability", persuasion: 0, swords: 0, guildSeal: true }, // Guild Seal for Heighliner
+      { id: SIGNET_RING_ID, name: "Signet Ring", type: "Agent", agentIcons: ["Loyalty"], effect: "Use leader Signet ability", persuasion: 0, swords: 0, guildSeal: true },
       { id: "start_002", name: "Conviction", type: "Agent", agentIcons: ["Bene Gesserit"], effect: "Gain 1 spice", persuasion: 1, swords: 0 },
       { id: "start_003", name: "Dune, The Desert Planet", type: "Agent", agentIcons: ["Fremen"], effect: "Gain 1 water", persuasion: 1, swords: 0 },
       { id: "start_004", name: "Diplomacy", type: "Agent", agentIcons: ["Emperor"], effect: "Gain 2 Solari", persuasion: 0, swords: 0 },
       { id: "start_005", name: "Seek Allies", type: "Agent", agentIcons: ["Spacing Guild"], effect: "Gain 1 influence with any faction", persuasion: 0, swords: 0 },
-      { id: "start_006", name: "Reconnaissance", type: "Agent", agentIcons: ["Wealth"], effect: "Draw 1 card", persuasion: 0, swords: 0 }, // CHOAM/Wealth icon
+      { id: "start_006", name: "Reconnaissance", type: "Agent", agentIcons: ["Wealth"], effect: "Draw 1 card", persuasion: 0, swords: 0 },
       { id: "start_007", name: "Arrakis Liaison", type: "Agent", agentIcons: ["Fremen", "Military"], effect: "Deploy 1 troop", persuasion: 0, swords: 1 },
       { id: "start_008", name: "Bene Gesserit Initiate", type: "Agent", agentIcons: ["Bene Gesserit", "Any"], effect: "Trash a card from hand or discard, then draw 1", persuasion: 0, swords: 0 },
       { id: "start_009", name: "Imperial Spy", type: "Agent", agentIcons: ["Emperor", "Intrigue"], effect: "Draw 1 intrigue card", persuasion: 0, swords: 0 },
@@ -202,10 +220,12 @@ class DuneImperiumGame {
 
   initializeDecks() {
     // Populate Intrigue, Conflict, Imperium decks with more detailed card objects
-    // Example card structure: { id, name, type, cost, agentEffect, revealEffect, factionIcon, persuasion, swords, vp }
-    this.decks.intrigue = [ /* ... detailed intrigue cards ... */ ];
-    this.decks.conflict = [ /* ... detailed conflict cards ... */ ];
-    this.decks.imperium = [ /* ... detailed imperium cards ... */ ];
+    this.decks.intrigue = JSON.parse(JSON.stringify(getAllIntrigueCards())); // Use new Intrigue cards
+    this.decks.conflict = [
+      { id: "conflict_I_001", name: "Skirmish for Spice", type: "Conflict", level: 1, rewards: [{rank: 1, spice: 2, vp: 1}, {rank: 2, spice: 1}]},
+      // TODO: Add more conflict cards
+    ];
+    this.decks.imperium = JSON.parse(JSON.stringify(getAllImperiumCards()));
 
     this.shuffle(this.decks.intrigue);
     this.shuffle(this.decks.conflict);
@@ -215,7 +235,7 @@ class DuneImperiumGame {
 
   revealInitialConflictCard() {
     if (this.decks.conflict.length > 0) {
-      this.revealedConflict = this.decks.conflict.shift(); // Use shift to take from top after shuffle
+      this.revealedConflict = this.decks.conflict.shift();
       this.log(`Revealed Conflict Card: ${this.revealedConflict.name}`);
     }
   }
@@ -326,19 +346,62 @@ class DuneImperiumGame {
     const player = this.getPlayer(playerId);
     if (!player) return;
 
+    const actualRecruitCount = count; // Could be modified by effects in future
+
     if (toConflict) {
-        player.activeCombatUnits += count;
-        if (!this.conflictParticipants.includes(playerId)) {
+        player.activeCombatUnits += actualRecruitCount;
+        if (actualRecruitCount > 0 && !this.conflictParticipants.includes(playerId)) {
             this.conflictParticipants.push(playerId);
         }
-        this.log(`Player ${player.name} deployed ${count} troops directly to conflict. Total in conflict: ${player.activeCombatUnits}`);
+        this.log(`Player ${player.name} deployed ${actualRecruitCount} troops directly to conflict. Total in conflict: ${player.activeCombatUnits}`);
     } else {
-        player.garrison.count += count;
-        this.log(`Player ${player.name} recruited ${count} troops to garrison. Total in garrison: ${player.garrison.count}`);
+        player.garrison.count += actualRecruitCount;
+        this.log(`Player ${player.name} recruited ${actualRecruitCount} troops to garrison. Total in garrison: ${player.garrison.count}`);
     }
+
+    // Check for Glossu Rabban's left-side ability
+    this.players.forEach(p => {
+        if (p.id !== playerId && p.leader && p.leader.id === LEADERS.glossuRabban.id) {
+            if (actualRecruitCount > 0) { // Only trigger if troops were actually gained
+                this.gainResources(p.id, { solari: 1 });
+                this.log(`Glossu Rabban (Player ${p.name}) gains 1 Solari due to Player ${playerId} gaining troops.`);
+            }
+        }
+    });
   }
 
   // --- Card Effects Execution ---
+  executeSignetRingAbility(playerId) {
+    const player = this.getPlayer(playerId);
+    if (!player || !player.leader) return false;
+    this.log(`Player ${player.name} uses ${player.leader.name}'s Signet Ring ability.`);
+
+    switch (player.leader.id) {
+        case LEADERS.paulAtreides.id:
+            player.paulSignetActive = true;
+            this.log("Paul Atreides' Signet: Will gain 1 troop if combat is won with troops present.");
+            break;
+        case LEADERS.glossuRabban.id:
+            if (this.spendResources(playerId, { solari: 2 })) {
+                this.recruitTroops(playerId, 1, false); // to garrison
+            } else {
+                this.log("Glossu Rabban Signet: Not enough Solari (2) to gain a troop.");
+            }
+            break;
+        case LEADERS.memnonThorvald.id:
+            this.gainResources(playerId, { solari: 1 });
+            this.recruitTroops(playerId, 1, false);
+            break;
+        case LEADERS.ilbanRichese.id:
+            this.drawCards(playerId, 1, 'deck');
+            break;
+        default:
+            this.log(`Unknown leader Signet ability for ${player.leader.name}`);
+            return false;
+    }
+    return true;
+  }
+
   executeSpaceEffects(playerId, locationId, cardPlayed) {
     const player = this.getPlayer(playerId);
     const location = this.boardLocations[locationId];
@@ -346,36 +409,176 @@ class DuneImperiumGame {
 
     this.log(`Player ${player.name} executing effects for ${location.name} with card ${cardPlayed.name}.`);
 
-    // Location's defined effect
-    if (location.effect) {
-        const success = location.effect(playerId, cardPlayed); // Pass cardPlayed for context (e.g. Heighliner Guild Seal)
-        if (success === false) return false; // e.g. Heighliner not enough spice
+    // SIGNET RING OVERRIDE: If the card is Signet Ring, its effect is special.
+    if (cardPlayed.id === "start_001_signet_ring") { // Ensure this ID matches the Signet Ring card
+        return this.executeSignetRingAbility(playerId);
     }
 
-    // Card's agent box effect (if applicable, needs card data structure)
+    // Standard Location's defined effect
+    if (location.effect) {
+        const success = location.effect(playerId, cardPlayed);
+        if (success === false) return false;
+    }
+
+    // Standard Card's agent box effect
     if (cardPlayed && cardPlayed.agentEffect) {
-        // This needs a parser for card effects. Example:
-        // if (cardPlayed.agentEffect.gainSpice) player.resources.spice += cardPlayed.agentEffect.gainSpice;
-        // if (cardPlayed.agentEffect.drawCards) this.drawCards(playerId, cardPlayed.agentEffect.drawCards);
-        this.log(`Card ${cardPlayed.name} agent effect: ${cardPlayed.effect}`); // Placeholder
+        const effect = cardPlayed.agentEffect;
+        this.log(`Card ${cardPlayed.name} agent effect attempting: ${cardPlayed.agentEffectText}`);
+
+        if (effect.resources) this.gainResources(playerId, effect.resources);
+        if (effect.draw) this.drawCards(playerId, effect.draw, 'deck');
+        if (effect.recruit) this.recruitTroops(playerId, effect.recruit.count, effect.recruit.toConflict);
+        if (effect.deployFromGarrison) {
+            const deployable = Math.min(player.garrison.count, effect.deployFromGarrison);
+            this.recruitTroops(playerId, deployable, true); // Move from garrison to conflict
+            player.garrison.count -= deployable; // This is a bit redundant if recruitTroops handles it, ensure it does
+            this.log(`Player ${player.name} deployed ${deployable} from garrison to conflict via ${cardPlayed.name}.`);
+        }
+        if (effect.gainInfluence) this.gainInfluence(playerId, effect.gainInfluence.faction, effect.gainInfluence.amount);
+
+        if (effect.optionalCost) {
+            const cost = effect.optionalCost.resources; // Assuming cost is always resources for now
+            const benefit = effect.optionalCost.benefit;
+            // For AI (ctx.currentPlayer might not be available here directly, assume isAI check)
+            // This logic will be more robust when AI plays its turn fully.
+            // For now, if it's an AI player (e.g. determined by player object property or ctx if available)
+            const isAI = player.isAI; // Hypothetical property, or check ctx.playerID if this is a move context
+
+            if (isAI) { // Simplified AI decision
+                let canAffordOptionalAI = true;
+                if (cost) {
+                    for(const res in cost) {
+                        if (player.resources[res] < cost[res]) {
+                            canAffordOptionalAI = false; break;
+                        }
+                    }
+                }
+                if (canAffordOptionalAI) {
+                    if (cost) this.spendResources(playerId, cost);
+                    if (benefit.resources) this.gainResources(playerId, benefit.resources);
+                    if (benefit.draw) this.drawCards(playerId, benefit.draw, 'deck');
+                    if (benefit.recruit) this.recruitTroops(playerId, benefit.recruit.count, benefit.recruit.toConflict);
+                    this.log(`AI Player ${player.name} paid optional cost for ${cardPlayed.name} and gained benefit.`);
+                } else {
+                    this.log(`AI Player ${player.name} could not afford or chose not to pay optional cost for ${cardPlayed.name}.`);
+                }
+            } else { // Human player
+                player.pendingDecision = {
+                    type: 'optionalCost',
+                    cardId: cardPlayed.id, // Store cardId for context
+                    cardName: cardPlayed.name,
+                    cost: cost,
+                    benefit: benefit,
+                    source: 'agentEffect', // To know where this decision originated
+                };
+                this.log(`Player ${player.name} has a pending optional cost decision for ${cardPlayed.name}.`);
+                return true; // Pause further effects until decision is made
+            }
+        }
+
+        if (effect.custom) {
+            this.executeCustomAgentEffect(playerId, effect.custom, cardPlayed, locationId);
+        }
     }
     return true;
   }
+
+  executeCustomAgentEffect(playerId, customEffectId, cardPlayed, locationId) {
+    // Placeholder for custom agent effects that don't fit simple resource/draw/recruit structure
+    const player = this.getPlayer(playerId);
+    this.log(`Executing custom agent effect: ${customEffectId} for card ${cardPlayed.name}`);
+    switch (customEffectId) {
+        case "choam_directorship_agent":
+            // "Gain 1 Spice for each CHOAM space you have an agent on (including this one)."
+            let spiceGain = 0;
+            Object.values(this.boardLocations).forEach(loc => {
+                if (loc.faction === "CHOAM" && loc.agents.includes(playerId)) { // Assuming CHOAM spaces have faction:"CHOAM"
+                    spiceGain++;
+                }
+            });
+            if (this.boardLocations[locationId].faction === "CHOAM" && !Object.values(this.boardLocations).find(loc => loc.faction === "CHOAM" && loc.id === locationId && loc.agents.includes(playerId))) {
+                 // This check is a bit complex; ensure the current space is counted if it's CHOAM
+                 // The current location's agent list is already updated.
+            }
+            if (spiceGain > 0) this.gainResources(playerId, { spice: spiceGain });
+            this.log(`CHOAM Directorship: Player ${player.name} gains ${spiceGain} spice.`);
+            break;
+        case "bene_gesserit_initiate_agent":
+            // "Trash a card from your hand or discard pile. Then, draw a card."
+            // Needs AI/player choice. For now, AI might trash a starting card if available.
+            // Simplified: if AI, trash first available from hand (not Signet Ring). If human, log.
+            if (player.hand.length > 1) { // Keep at least one card if possible
+                const cardToTrash = player.hand.find(c => c.id !== "start_001_signet_ring") || player.hand[0];
+                if (cardToTrash) {
+                    this.trashCard(playerId, cardToTrash.id, 'hand'); // Needs trashCard implementation
+                    this.drawCards(playerId, 1, 'deck');
+                }
+            } else {
+                 this.log(`Bene Gesserit Initiate: Not enough cards to trash or no valid target for AI.`);
+            }
+            break;
+        case "stillsuit_agent":
+            // "If you deployed an agent to a desert space, gain 1 Water."
+            const desertSpaces = ["arrakeen", "carthag", "sietchTabr", "imperialBasin", "haggaBasin"]; // Example IDs
+            if (desertSpaces.includes(locationId)) {
+                this.gainResources(playerId, { water: 1 });
+            }
+            break;
+        case "the_voice_agent":
+            // "Remove 1 troop from any player's garrison in any conflict sector OR Gain 2 Solari."
+            // Complex choice. AI: default to Solari. Human: log.
+            this.gainResources(playerId, { solari: 2 });
+            this.log(`The Voice: Player ${player.name} chose to gain 2 Solari (default for AI).`);
+            break;
+        default:
+            this.log(`Unknown custom agent effect ID: ${customEffectId}`);
+    }
+  }
+
+  trashCard(playerId, cardId, source) { // source: 'hand' or 'discardPile'
+      const player = this.getPlayer(playerId);
+      let cardIndex = -1;
+      let foundCard = null;
+
+      if (source === 'hand') {
+          cardIndex = player.hand.findIndex(c => c.id === cardId);
+          if (cardIndex > -1) foundCard = player.hand.splice(cardIndex, 1)[0];
+      } else if (source === 'discardPile') {
+          cardIndex = player.discardPile.findIndex(c => c.id === cardId);
+          if (cardIndex > -1) foundCard = player.discardPile.splice(cardIndex, 1)[0];
+      }
+
+      if (foundCard) {
+          this.log(`Player ${player.name} trashed ${foundCard.name} from ${source}.`);
+          // Add to a conceptual "trash pile" if needed for other game mechanics, otherwise it's just gone.
+      } else {
+          this.log(`Error: Card ${cardId} not found in ${source} for trashing for player ${player.name}.`);
+      }
+  }
+
 
   executeCardRevealEffects(playerId, revealedCardObjects) {
     const player = this.getPlayer(playerId);
     if (!player) return;
 
-    player.resources.persuasion = 0; // Reset for the turn
-    player.resources.swords = 0;    // Reset for the turn
+    player.resources.persuasion = 0;
+    player.resources.swords = 0;
 
     this.log(`Player ${player.name} revealing cards: ${revealedCardObjects.map(c=>c.name).join(', ')}`);
     revealedCardObjects.forEach(card => {
-        if (card.persuasion) player.resources.persuasion += card.persuasion;
-        if (card.swords) player.resources.swords += card.swords;
-        // TODO: Implement other specific reveal effects from cards (e.g., gain spice, draw card, trash)
-        // Example: if(card.revealEffect && card.revealEffect.gainSpice) player.resources.spice += card.revealEffect.gainSpice;
-        this.log(`Card ${card.name} provides ${card.persuasion || 0} persuasion, ${card.swords || 0} swords. Effect: ${card.effect}`);
+        if (card.revealEffect) {
+            const effect = card.revealEffect;
+            if (effect.persuasion) player.resources.persuasion += effect.persuasion;
+            if (effect.swords) player.resources.swords += effect.swords;
+            if (effect.resources) this.gainResources(playerId, effect.resources);
+            if (effect.draw) this.drawCards(playerId, effect.draw, 'deck');
+            // TODO: Implement other specific reveal effects from cards (e.g., gain influence, trash)
+            this.log(`Card ${card.name} (Reveal): provides ${effect.persuasion || 0} persuasion, ${effect.swords || 0} swords. Additional: ${JSON.stringify(effect.resources)}, Draw: ${effect.draw || 0}`);
+        } else { // Fallback for older card format or cards with only direct persuasion/swords
+             if (card.persuasion) player.resources.persuasion += card.persuasion;
+             if (card.swords) player.resources.swords += card.swords;
+             this.log(`Card ${card.name} (Legacy Reveal): provides ${card.persuasion || 0} persuasion, ${card.swords || 0} swords.`);
+        }
     });
     this.log(`Player ${player.name} total for reveal: ${player.resources.persuasion} persuasion, ${player.resources.swords} swords.`);
   }
@@ -461,43 +664,212 @@ class DuneImperiumGame {
         // TODO: Revert state if space effect failed (e.g. Heighliner cost not met) - complex, needs careful thought
     }
 
+    // After standard effects, check if this is a combat space for troop deployment decision
+    const locationData = this.boardLocations[locationId];
+    if (locationData.isCombatZone && !player.isAI) { // Assume combat zones are marked, e.g. carthag
+        const maxDeployableTroops = (player.garrison.count || 0) + (cardPlayed.agentEffect?.recruit?.toConflict ? cardPlayed.agentEffect.recruit.count : 0);
+        if (maxDeployableTroops > 0) { // Only prompt if there are troops to deploy
+            player.pendingDecision = {
+                type: 'deployTroops',
+                locationId: locationId, // The combat space itself
+                maxDeployableTroops: maxDeployableTroops,
+                // Store troops recruited by the card if they must go to conflict
+                cardRecruitedToConflict: (cardPlayed.agentEffect?.recruit?.toConflict ? cardPlayed.agentEffect.recruit.count : 0)
+            };
+            this.log(`Player ${player.name} needs to decide on troop deployment at ${locationData.name}.`);
+            return true; // Pause for decision
+        }
+    }
     // this.endPlayerTurnActions(); // Or player can take more actions if they have agents
     return true;
   }
 
   // Player plays an intrigue card
-  playIntrigueCard(playerId, cardId) {
-    if (playerId !== this.currentPlayerIndex) {
-        // Allow playing out of turn if card permits (e.g. combat intrigue)
-        // For now, we assume the core game logic handles this, but a check might be good.
-        // this.log("Warning: Player playing intrigue card out of turn.");
-    }
+  playIntrigueCard(playerId, cardId, targetData = {}) {
     const player = this.getPlayer(playerId);
     const cardIndex = player.intrigueCards.findIndex(c => c.id === cardId);
+
     if (!player || cardIndex === -1) {
         this.log(`Error: Player ${player.name} does not have intrigue card ${cardId}.`);
         return false;
     }
+    const card = player.intrigueCards[cardIndex];
 
-    const card = player.intrigueCards.splice(cardIndex, 1)[0];
-    this.log(`Player ${player.name} plays intrigue card: ${card.name}. Effect: ${card.effectText}`);
+    const isAI = !!player.isAI; // Ensure isAI is a boolean
 
-    // TODO: Implement detailed intrigue card effect execution logic
-    // e.g., this.executeIntrigueEffect(playerId, card);
-    if (card.vp) { player.victoryPoints += card.vp; this.checkVictoryConditions(playerId); }
-    if (card.effectText.includes("Gain 1 Spice")) this.gainResources(playerId, {spice: 1}); // Simplified
+    // Targeting logic for human players
+    if (card.effect && card.effect.custom &&
+        (card.effect.custom === "decoy_effect" || card.effect.custom === "poison_snooper_effect") &&
+        !isAI && targetData.targetPlayerId === undefined) {
+
+        const validTargets = this.players.filter(p => p.id !== playerId).map(p => p.id);
+        if (validTargets.length === 0) {
+             this.log(`No valid targets for ${card.name}. Effect fizzles.`);
+             player.intrigueCards.splice(cardIndex, 1); // Consume card
+             // player.discardPile.push(card); // Or discard it
+             return false;
+        }
+        player.pendingDecision = {
+            type: 'selectPlayerTarget',
+            cardId: card.id,
+            cardName: card.name,
+            validTargets: validTargets,
+            customEffectId: card.effect.custom,
+        };
+        this.log(`Player ${player.name} needs to select a target for ${card.name}.`);
+        return true;
+    }
+
+    player.intrigueCards.splice(cardIndex, 1); // Card is now being fully processed
+    this.log(`Player ${player.name} plays intrigue card: ${card.name}. (${card.intrigueType})`);
+
+    if (card.intrigueType === "Endgame") {
+        player.playedIntrigueCards.push(card);
+        this.log(`${card.name} is an Endgame card, its effect will be resolved at game end.`);
+        return true;
+    }
+
+    const effect = card.effect;
+    if (!effect) {
+        this.log(`No effect defined for intrigue card ${card.name}`);
+        return false;
+    }
+
+    if (effect.vp) { this.gainResources(playerId, {vp: effect.vp}); this.checkVictoryConditions(playerId); }
+    if (effect.resources) this.gainResources(playerId, effect.resources);
+    if (effect.draw) this.drawCards(playerId, effect.draw, 'deck');
+    if (effect.gainInfluence) this.gainInfluence(playerId, effect.gainInfluence.faction, effect.gainInfluence.amount);
+    if (effect.recruit) this.recruitTroops(playerId, effect.recruit.count, effect.recruit.toConflict);
+    if (effect.swords) {
+        if (this.gamePhase === 'combat' || this.conflictParticipants.includes(playerId)) {
+            player.resources.swords += effect.swords;
+            this.log(`Player ${player.name} gains ${effect.swords} swords for combat from ${card.name}.`);
+        } else {
+            this.log(`Warning: ${card.name} (Combat Intrigue) played outside of combat context.`);
+        }
+    }
+
+    if (effect.custom) {
+        this.executeCustomIntrigueEffect(playerId, card, targetData);
+    }
     return true;
+  }
+
+
+  executeCustomIntrigueEffect(playerId, card, targetData) {
+    const player = this.getPlayer(playerId);
+    this.log(`Executing custom intrigue effect: ${card.effect.custom} for card ${card.name}`);
+
+    switch (card.effect.custom) {
+        case "decoy_effect":
+            const targetOpponentId_decoy = targetData.targetPlayerId;
+            if (targetOpponentId_decoy === undefined) {
+                 this.log("Decoy: No target opponent selected. Effect fizzles."); return;
+            }
+            const targetOpponent_decoy = this.getPlayer(targetOpponentId_decoy);
+            if (!targetOpponent_decoy) { this.log("Decoy: Invalid target opponent."); return; }
+
+            if (targetOpponent_decoy.activeCombatUnits >= 2) {
+                targetOpponent_decoy.activeCombatUnits -= 2;
+                this.log(`Decoy: Player ${targetOpponent_decoy.name} removes 2 troops from conflict. Remaining: ${targetOpponent_decoy.activeCombatUnits}`);
+            } else if (targetOpponent_decoy.activeCombatUnits === 1) {
+                targetOpponent_decoy.activeCombatUnits -= 1;
+                targetOpponent_decoy.garrison.count = Math.max(0, targetOpponent_decoy.garrison.count - 1);
+                this.log(`Decoy: Player ${targetOpponent_decoy.name} removes 1 from conflict, 1 from garrison.`);
+            } else if (targetOpponent_decoy.garrison.count >=2) {
+                targetOpponent_decoy.garrison.count -= 2;
+                this.log(`Decoy: Player ${targetOpponent_decoy.name} removes 2 troops from garrison. Remaining: ${targetOpponent_decoy.garrison.count}`);
+            } else {
+                targetOpponent_decoy.garrison.count = 0;
+                this.log(`Decoy: Player ${targetOpponent_decoy.name} removes remaining troops from garrison.`);
+            }
+            break;
+        case "poison_snooper_effect":
+            const targetOpponentId_snooper = targetData.targetPlayerId;
+            // For human, cardToDiscardId would be part of a second decision step.
+            // For AI, assume it makes this choice and includes it in targetData.
+            const cardToDiscardId = targetData.cardToDiscardId;
+
+            if (targetOpponentId_snooper === undefined) {
+                this.log("Poison Snooper: Target not selected. Effect fizzles."); return;
+            }
+            const targetOpponent_snooper = this.getPlayer(targetOpponentId_snooper);
+            if (!targetOpponent_snooper) { this.log("Poison Snooper: Invalid target."); return; }
+
+            if (!cardToDiscardId && !player.isAI) { // Human player needs to choose a card
+                 player.pendingDecision = {
+                    type: 'selectCardFromHand',
+                    targetPlayerId: targetOpponentId_snooper,
+                    sourceCardId: card.id, // The Poison Snooper card itself
+                    reason: "poison_snooper_discard",
+                 };
+                 this.log(`Player ${player.name} needs to select a card from Player ${targetOpponent_snooper.name}'s hand to discard.`);
+                 return; // Pause for decision
+            }
+
+            // If AI or human has made choice:
+            if (cardToDiscardId) {
+                const cardIdx = targetOpponent_snooper.hand.findIndex(c => c.id === cardToDiscardId);
+                if (cardIdx > -1) {
+                    const discarded = targetOpponent_snooper.hand.splice(cardIdx, 1)[0];
+                    targetOpponent_snooper.discardPile.push(discarded);
+                    this.log(`Poison Snooper: Player ${player.name} forces Player ${targetOpponent_snooper.name} to discard ${discarded.name}.`);
+                } else {
+                     this.log(`Poison Snooper: Card ${cardToDiscardId} not found in Player ${targetOpponent_snooper.name}'s hand.`);
+                }
+            } else {
+                // AI couldn't pick a card (e.g. hand empty, or its logic failed)
+                this.log(`Poison Snooper: AI for Player ${player.name} did not select a card to discard from Player ${targetOpponent_snooper.name}.`);
+            }
+            break;
+        case "bindu_suspension_effect":
+            const agentLocationId = targetData.agentLocationId;
+            if (!agentLocationId || !this.boardLocations[agentLocationId] || !this.boardLocations[agentLocationId].agents.includes(playerId)) {
+                // AI / Human choice needed. For human, set pendingDecision.
+                if (!player.isAI) {
+                    const validAgentLocations = Object.keys(this.boardLocations).filter(locId => this.boardLocations[locId].agents.includes(playerId));
+                    if (validAgentLocations.length === 0) { this.log("Bindu Suspension: No agents on board to protect."); return; }
+                    player.pendingDecision = {
+                        type: 'selectAgentLocation',
+                        cardId: card.id,
+                        reason: 'bindu_suspension_select',
+                        validLocations: validAgentLocations,
+                    };
+                    this.log(`Player ${player.name} needs to select an agent to protect with Bindu Suspension.`);
+                    return; // Pause for decision
+                } else { // AI makes a choice
+                    const firstValidAgentLoc = Object.keys(this.boardLocations).find(locId => this.boardLocations[locId].agents.includes(playerId));
+                    if (firstValidAgentLoc) {
+                        player.skipRecallAgentId = firstValidAgentLoc;
+                        this.log(`Bindu Suspension: Player ${player.name}'s agent at ${this.boardLocations[firstValidAgentLoc].name} will not be recalled this round (AI default).`);
+                    } else {
+                        this.log(`Bindu Suspension: Player ${player.name} has no agents on board to protect.`);
+                    }
+                    return; // AI decision made
+                }
+            }
+            // If targetData.agentLocationId was provided (e.g. by human's selectAgentLocation move or AI)
+            player.skipRecallAgentId = agentLocationId;
+            this.log(`Bindu Suspension: Player ${player.name}'s agent at ${this.boardLocations[agentLocationId].name} will not be recalled this round.`);
+            break;
+        default:
+            this.log(`Unknown custom intrigue effect ID: ${card.effect.custom}`);
+    }
   }
 
   // Player reveals cards for persuasion, swords, etc. (Reveal Turn)
   revealTurn(playerId, cardIdsToPlay) {
     if (playerId !== this.currentPlayerIndex) {
-        console.error("Not your turn!");
+        this.log("Error: Not your turn!");
         return false;
     }
     const player = this.getPlayer(playerId);
     if (this.gamePhase !== 'playerTurn' || player.agents > 0 || player.hasPassedReveal) {
         this.log("Error: Cannot take reveal turn. (Not player turn, agents > 0, or already revealed).");
+        return false;
+    }
+    if (player.pendingDecision) {
+        this.log("Error: Cannot reveal, player has a pending decision.");
         return false;
     }
 
@@ -512,7 +884,6 @@ class DuneImperiumGame {
     this.executeCardRevealEffects(playerId, cardsToRevealObjects);
     player.revealedCards.push(...cardsToRevealObjects);
     player.hand = player.hand.filter(c => !cardIdsToPlay.includes(c.id));
-    // Player can now purchase and commit troops. Player must call endPlayerTurnActions to finalize.
     return true;
   }
 
@@ -524,8 +895,12 @@ class DuneImperiumGame {
       return false;
     }
     const player = this.getPlayer(playerId);
-    if (player.agents > 0 || player.hasPassedReveal) {
+    if (player.agents > 0 || player.hasPassedReveal) { // Can only purchase during Reveal phase, after agents, before ending actions
         this.log("Error: Can only purchase during reveal phase after playing agents and before passing.");
+        return false;
+    }
+    if (player.pendingDecision) {
+        this.log("Error: Cannot purchase, player has a pending decision.");
         return false;
     }
 
@@ -534,35 +909,171 @@ class DuneImperiumGame {
       this.log(`Error: Card ${cardId} not found in Imperium Row.`);
       return false;
     }
-    const card = this.imperiumRow[cardIndex];
-    if (!this.spendResources(playerId, { persuasion: card.cost })) {
-      this.log(`Error: Player ${player.name} cannot afford ${card.name}. Needs ${card.cost} persuasion, has ${player.resources.persuasion}.`);
+    const imperiumCard = this.imperiumRow[cardIndex]; // Renamed to avoid conflict
+    if (!this.spendResources(playerId, { persuasion: imperiumCard.cost })) {
+      this.log(`Error: Player ${player.name} cannot afford ${imperiumCard.name}. Needs ${imperiumCard.cost} persuasion, has ${player.resources.persuasion}.`);
       return false;
     }
 
-    player.discardPile.push(card); // Purchased card goes to discard pile
-    this.imperiumRow.splice(cardIndex, 1); // Remove from Imperium Row
-    this.populateImperiumRow(); // Refill Imperium Row
+    player.discardPile.push(imperiumCard);
+    this.imperiumRow.splice(cardIndex, 1);
+    this.populateImperiumRow();
+    this.log(`Player ${player.name} purchased ${imperiumCard.name}.`);
 
-    this.log(`Player ${player.name} purchased ${card.name}.`);
+    if (player.leader && player.leader.id === LEADERS.ilbanRichese.id && imperiumCard.tags && imperiumCard.tags.includes("Tech")) {
+        this.gainResources(playerId, { solari: 1 });
+        this.log(`Count Ilban Richese (Player ${player.name}) gains 1 Solari for acquiring a Tech card.`);
+    }
     return true;
   }
 
-  // Player commits troops to combat
+  // Player commits troops to combat (usually called by decideTroopDeployment or card effects)
   commitTroopsToCombat(playerId, numberOfTroops) {
     const player = this.getPlayer(playerId);
     if (!player) return false;
-    if (numberOfTroops < 0 || numberOfTroops > player.garrison.count) {
-        this.log(`Error: Invalid number of troops (${numberOfTroops}) for player ${player.name}. Garrison: ${player.garrison.count}`);
+
+    const troopsToCommit = Math.max(0, Math.min(numberOfTroops, player.garrison.count));
+
+    player.garrison.count -= troopsToCommit;
+    player.activeCombatUnits += troopsToCommit;
+    if (troopsToCommit > 0 && !this.conflictParticipants.includes(playerId)) {
+        this.conflictParticipants.push(playerId);
+    }
+    this.log(`Player ${player.name} committed ${troopsToCommit} from garrison to the conflict. Total active: ${player.activeCombatUnits}`);
+
+    if (player.leader && player.leader.id === LEADERS.memnonThorvald.id && troopsToCommit > 0) {
+        this.gainResources(playerId, { solari: 1 });
+        this.log(`Earl Memnon Thorvald (Player ${player.name}) gains 1 Solari for committing troops.`);
+    }
+    return true;
+  }
+
+
+  // --- New Decision Moves ---
+  decideOptionalCost(playerId, cardName, accept) { // cardName for logging/UI context
+    const player = this.getPlayer(playerId);
+    if (!player || !player.pendingDecision || player.pendingDecision.type !== 'optionalCost') {
+      this.log("Error: No pending optional cost decision or wrong type.");
+      return false;
+    }
+    if (playerId !== this.currentPlayerIndex) {
+      this.log("Error: Not your turn to decide optional cost.");
+      return false;
+    }
+
+    const decision = player.pendingDecision;
+    this.log(`Player ${player.name} decides on optional cost for ${decision.cardName}: ${accept ? 'Accept' : 'Decline'}`);
+
+    if (accept) {
+      if (decision.cost && !this.spendResources(playerId, decision.cost)) {
+        this.log(`Error: Could not afford optional cost for ${decision.cardName} upon accepting.`);
+        player.pendingDecision = null; // Clear decision anyway
+        return false;
+      }
+      // Grant benefit
+      const benefit = decision.benefit;
+      if (benefit.resources) this.gainResources(playerId, benefit.resources);
+      if (benefit.draw) this.drawCards(playerId, benefit.draw, 'deck');
+      if (benefit.recruit) this.recruitTroops(playerId, benefit.recruit.count, benefit.recruit.toConflict);
+      // ... other benefit types
+    }
+    player.pendingDecision = null;
+    // Potentially trigger next part of original action or allow player to continue turn.
+    return true;
+  }
+
+  selectPlayerTarget(playerId, sourceCardId, targetPlayerId) {
+    const player = this.getPlayer(playerId);
+    if (!player || !player.pendingDecision || player.pendingDecision.type !== 'selectPlayerTarget' || player.pendingDecision.cardId !== sourceCardId) {
+        this.log("Error: No pending player target selection or mismatched card.");
+        return false;
+    }
+    if (!player.pendingDecision.validTargets.includes(targetPlayerId)) {
+        this.log("Error: Invalid target selected.");
         return false;
     }
 
-    player.garrison.count -= numberOfTroops;
-    player.activeCombatUnits += numberOfTroops;
-    if (numberOfTroops > 0 && !this.conflictParticipants.includes(playerId)) { // Only add if they commit > 0
-        this.conflictParticipants.push(playerId);
+    const decision = player.pendingDecision;
+    const card = getAllIntrigueCards().find(c => c.id === decision.cardId); // Get full card data
+
+    this.log(`Player ${player.name} selected Player ${targetPlayerId} as target for ${decision.cardName}.`);
+    player.pendingDecision = null;
+
+    // Re-invoke the custom effect part of the intrigue card with the target
+    this.executeCustomIntrigueEffect(playerId, card, { targetPlayerId: targetPlayerId });
+    // If the custom effect itself needs another decision (e.g. Poison Snooper card choice), it will set pendingDecision.
+    return true;
+  }
+
+  selectCardFromHand(playerId, sourceCardId, targetPlayerId, selectedCardIdToDiscard) {
+    const player = this.getPlayer(playerId); // The one playing Poison Snooper
+    if (!player || !player.pendingDecision ||
+        player.pendingDecision.type !== 'selectCardFromHand' ||
+        player.pendingDecision.sourceCardId !== sourceCardId ||
+        player.pendingDecision.targetPlayerId !== targetPlayerId) {
+        this.log("Error: No pending card selection from hand or mismatched decision context.");
+        return false;
     }
-    this.log(`Player ${player.name} committed ${numberOfTroops} to the conflict. Total active: ${player.activeCombatUnits}`);
+    const targetPlayer = this.getPlayer(targetPlayerId);
+    if (!targetPlayer || !targetPlayer.hand.find(c => c.id === selectedCardIdToDiscard)) {
+        this.log("Error: Invalid target player or card not in target's hand for discard.");
+        return false;
+    }
+
+    const decision = player.pendingDecision;
+    const sourceCard = getAllIntrigueCards().find(c => c.id === decision.sourceCardId);
+
+    this.log(`Player ${player.name} (for ${sourceCard.name}) chose card ${selectedCardIdToDiscard} from Player ${targetPlayer.name}'s hand.`);
+    player.pendingDecision = null;
+
+    // Now execute the discard part of Poison Snooper
+    this.executeCustomIntrigueEffect(playerId, sourceCard, { targetPlayerId: targetPlayerId, cardToDiscardId: selectedCardIdToDiscard });
+    return true;
+  }
+
+  selectAgentLocation(playerId, sourceCardId, locationId) {
+    const player = this.getPlayer(playerId);
+     if (!player || !player.pendingDecision ||
+        player.pendingDecision.type !== 'selectAgentLocation' ||
+        player.pendingDecision.cardId !== sourceCardId ||
+        !player.pendingDecision.validLocations.includes(locationId)) {
+        this.log("Error: No pending agent location selection or invalid choice.");
+        return false;
+    }
+    const decision = player.pendingDecision;
+    const sourceCard = getAllIntrigueCards().find(c => c.id === decision.cardId);
+
+    this.log(`Player ${player.name} (for ${sourceCard.name}) selected agent at ${locationId}.`);
+    player.pendingDecision = null;
+    this.executeCustomIntrigueEffect(playerId, sourceCard, { agentLocationId: locationId });
+    return true;
+  }
+
+  decideTroopDeployment(playerId, locationId, numberOfTroops) {
+    const player = this.getPlayer(playerId);
+    if (!player || !player.pendingDecision || player.pendingDecision.type !== 'deployTroops' || player.pendingDecision.locationId !== locationId) {
+      this.log("Error: No pending troop deployment decision or mismatched location.");
+      return false;
+    }
+    const decision = player.pendingDecision;
+    if (numberOfTroops < 0 || numberOfTroops > decision.maxDeployableTroops) {
+      this.log(`Error: Invalid number of troops to deploy (${numberOfTroops}). Max: ${decision.maxDeployableTroops}`);
+      return false;
+    }
+
+    this.log(`Player ${player.name} decides to deploy ${numberOfTroops} troops to ${locationId}.`);
+
+    // Troops recruited by the card itself (if they go to conflict) are handled by card effect.
+    // This move is for troops from garrison.
+    const troopsFromGarrison = numberOfTroops - (decision.cardRecruitedToConflict || 0);
+
+    if (troopsFromGarrison > 0) {
+        this.commitTroopsToCombat(playerId, troopsFromGarrison);
+    }
+    // Any troops recruited by the card that go directly to conflict are assumed to be handled by its agentEffect.
+    // This move primarily finalizes garrison deployment.
+
+    player.pendingDecision = null;
     return true;
   }
 
@@ -649,117 +1160,184 @@ class DuneImperiumGame {
   proceedToMakerPhase() {
     this.gamePhase = 'maker';
     this.log("--- Maker Phase ---");
-    // Players gain spice from spice-producing locations they control (e.g., Arrakeen, Carthag if occupied by their agent)
-    // This is where `applyControlBonus` might come in for spice production.
     this.players.forEach(player => {
         Object.values(this.boardLocations).forEach(loc => {
             if (loc.agents.includes(player.id)) {
                 // Example: Arrakeen and certain other Fremen locations might produce spice in Maker phase.
-                // This needs to be explicitly defined in boardLocation data or a separate rule.
-                // e.g. if(loc.producesSpiceInMakerPhase) player.resources.spice += loc.producesSpiceInMakerPhase;
             }
         });
     });
-
     this.proceedToRecallPhase();
   }
 
   proceedToRecallPhase() {
     this.gamePhase = 'recall';
     this.log("--- Recall Phase ---");
-    // Retrieve all agents
     this.players.forEach(player => {
-        player.agents = 2; // Reset agents for next round
-        player.hasPassedReveal = false; // Reset for next round's reveal phase
-        // Move played cards to discard pile
+        player.agents = 2;
+        player.hasPassedReveal = false;
         player.discardPile.push(...player.playedCards);
         player.playedCards = [];
         player.discardPile.push(...player.revealedCards);
         player.revealedCards = [];
-        // Draw back up to 5 cards
         const cardsToDraw = 5 - player.hand.length;
         if (cardsToDraw > 0) {
             this.drawCards(player.id, cardsToDraw, 'deck');
         }
     });
-    // Clear agents from board locations
-    Object.values(this.boardLocations).forEach(loc => loc.agents = []);
 
-    // Apply end-of-round control bonuses (e.g. VP for controlling Arrakeen/Carthag if that's a rule)
-    // this.applyControlBonus(); Example call
+    // Clear agents from board locations, respecting Bindu Suspension
+    Object.keys(this.boardLocations).forEach(locId => {
+        const location = this.boardLocations[locId];
+        location.agents = location.agents.filter(agentPlayerId => {
+            const player = this.getPlayer(agentPlayerId);
+            if (player && player.skipRecallAgentId === locId) {
+                this.log(`Player ${player.name}'s agent at ${location.name} is not recalled due to Bindu Suspension.`);
+                player.skipRecallAgentId = null; // Effect is for one round
+                return true; // Keep this agent
+            }
+            return false; // Remove other agents
+        });
+    });
 
-    // Check for game end conditions again (e.g. after VP from intrigue or conflict)
+    // this.applyControlBonus();
+
     if (this.gamePhase !== 'gameOver') {
         this.round++;
         this.log(`--- End of Round ${this.round -1}. Starting Round ${this.round} ---`);
-        this.currentPlayerIndex = (this.round -1) % this.playerCount; // Simple first player rotation
+        this.currentPlayerIndex = (this.round -1) % this.playerCount;
+        const aboutToStartPlayer = this.getPlayer(this.currentPlayerIndex);
         this.gamePhase = 'playerTurn';
-        this.populateImperiumRow(); // Refresh if any slots are empty and deck has cards
-        console.log(`Player ${this.players[this.currentPlayerIndex].name}'s turn.`);
+        this.populateImperiumRow();
+        this.log(`Player ${aboutToStartPlayer.name}'s turn (Round ${this.round}).`);
+        this.nextTurn();
     }
   }
 
+  calculateEndgameVPs() {
+    this.log("--- Calculating Endgame VPs from Intrigue Cards ---");
+    this.players.forEach(player => {
+        player.playedIntrigueCards.forEach(card => {
+            if (card.intrigueType === "Endgame" && card.effect && card.effect.endgameVP) {
+                const condition = card.effect.endgameVP.condition;
+                const vpValue = card.effect.endgameVP.value;
+                let conditionMet = false;
 
-  // --- Victory Points and End Game ---
-  checkVictoryConditions(playerId) {
+                if (condition === "most_spice") {
+                    let maxSpice = -1;
+                    let playersWithMaxSpice = [];
+                    this.players.forEach(p => {
+                        if (p.resources.spice > maxSpice) {
+                            maxSpice = p.resources.spice;
+                            playersWithMaxSpice = [p.id];
+                        } else if (p.resources.spice === maxSpice) {
+                            playersWithMaxSpice.push(p.id);
+                        }
+                    });
+                    if (playersWithMaxSpice.length === 1 && playersWithMaxSpice[0] === player.id && maxSpice > 0) {
+                        conditionMet = true;
+                    }
+                } else if (condition === "two_alliances") {
+                    let allianceCount = 0;
+                    for (const faction in player.factionAlliances) {
+                        if (player.factionAlliances[faction]) {
+                            allianceCount++;
+                        }
+                    }
+                    if (allianceCount >= 2) {
+                        conditionMet = true;
+                    }
+                }
+                // Add more endgame conditions here
+
+                if (conditionMet) {
+                    this.log(`Player ${player.name} gains ${vpValue} VP from Endgame card: ${card.name}.`);
+                    player.victoryPoints += vpValue;
+                    // No need to call checkVictoryConditions here as it's final scoring.
+                }
+            }
+        });
+    });
+  }
+
+  checkVictoryConditions(playerId) { // Should only trigger game end, not calculate endgame VPs
     const player = this.getPlayer(playerId);
-    if (player && player.victoryPoints >= 10) { // Standard VP threshold is 10
-      this.endGame(playerId);
+    if (player && player.victoryPoints >= 10 && this.gamePhase !== 'gameOver') {
+      this.endGame(playerId); // Normal victory
       return true;
     }
-    // Additional end game condition: Conflict deck runs out (after current conflict resolves)
-    if (this.revealedConflict === null && this.decks.conflict.length === 0 && (this.gamePhase === 'combat' || this.gamePhase === 'maker')) {
-        console.log("Final conflict resolved and conflict deck is empty. Game ends after this round finishes.");
-        // The game should proceed through recall, then end.
-        // This logic might need adjustment to ensure it triggers at the right point (e.g. after Recall).
+    // Check for end of game by conflict deck running out AFTER the current conflict and subsequent phases resolve
+    if (this.round > 10 && this.revealedConflict === null && this.decks.conflict.length === 0 && this.gamePhase !== 'gameOver') {
+         if (this.gamePhase === 'recall') { // Only trigger actual game end sequence after recall
+            this.log("Final conflict card resolved and conflict deck empty. Game truly ends now.");
+            this.endGame(null); // Pass null to indicate game ends by condition, not specific player hitting VP threshold during turn.
+            return true;
+         } else if (this.gamePhase !== 'setup') { // Log during combat/maker that end is imminent
+             this.log("Final conflict card resolved and conflict deck empty. Game will end after this round's Recall phase.");
+         }
     }
-
     return false;
   }
 
-  endGame(winnerId) {
-    this.gamePhase = 'gameOver';
-    const winner = this.getPlayer(winnerId);
-    this.log(`--- Game Over ---`);
-    if (winner) {
-        this.log(`Player ${winner.name} wins with ${winner.victoryPoints} Victory Points!`);
+  endGame(winnerId) { // winnerId can be null if game ends by condition
+    if (this.gamePhase === 'gameOver') return; // Prevent multiple endGame calls
+
+    this.log("--- Attempting to End Game ---");
+    this.calculateEndgameVPs(); // Calculate VPs from played Endgame Intrigue cards
+
+    this.gamePhase = 'gameOver'; // Set phase before finding winner by score
+
+    if (winnerId !== null) { // A player reached 10 VP during their turn or from an immediate effect
+        const directWinner = this.getPlayer(winnerId);
+         this.log(`Player ${directWinner.name} reached 10+ VP, triggering game end. Final scores after endgame intrigues:`);
     } else {
-        // Handle game end by other conditions (e.g. conflict deck empty, determine winner by tiebreakers)
-        this.log("Game ended. Determine winner by tiebreakers if necessary.");
-        // TODO: Implement tie-breaking logic if needed.
+        this.log("Game ends due to condition (e.g., conflict deck empty). Final scores after endgame intrigues:");
     }
-    // TODO: Display final scores, etc.
+
+    // Determine final winner based on highest VP after endgame VPs
+    let finalWinner = null;
+    let maxVP = -1;
+    this.players.forEach(p => {
+        this.log(`Player ${p.name} final score: ${p.victoryPoints}`);
+        if (p.victoryPoints > maxVP) {
+            maxVP = p.victoryPoints;
+            finalWinner = p;
+        } else if (p.victoryPoints === maxVP) {
+            // TODO: Implement tie-breaker logic (e.g. spice, solari, water, garrison troops)
+            this.log(`Tie in VP between ${finalWinner.name} and ${p.name}. Tie-breaking needed.`);
+            // For now, first player to reach this score in player order might win, or it's a shared victory.
+            // Let's assume current finalWinner holds for simplicity if tie-breaking isn't implemented.
+        }
+    });
+
+    if (finalWinner) {
+        this.log(`--- Game Over ---`);
+        this.log(`Player ${finalWinner.name} wins with ${finalWinner.victoryPoints} Victory Points!`);
+    } else {
+        this.log(`--- Game Over ---`);
+        this.log("Game ended. No single winner by VP or tie-breaker rule not fully implemented.");
+    }
   }
 
-  // --- Utility functions ---
   shuffleDeck(deck) {
-    this.shuffle(deck); // Use the generalized shuffle
+    this.shuffle(deck);
   }
 
-  // Helper to get player by ID
   getPlayer(playerId) {
     return this.players.find(p => p.id === playerId);
   }
 
-  // Helper to get location by ID
   getLocation(locationId) {
     return this.boardLocations[locationId];
   }
 
-+  // Placeholder for other helpers mentioned if they become relevant
-+  applyControlBonus() { /* e.g. VP for controlling Arrakeen/Carthag at round end */ }
-+  stealIntrigueFromRichPlayers(thiefPlayerId, victimChoiceCriteria) { /* Complex logic */ }
-+  acquireReserveCard(playerId, cardId) { /* Logic for special acquisition */ }
-+
-+  // Example of a more complex card effect that might be on a card
-+  // beneGesseritPower(playerId, targetPlayerId, cardToGuess) {
-+  //   // BG player guesses a card in target's hand. If correct, target discards it, BG player gains resources.
-+  // }
-+
- }
+  applyControlBonus() { /* Placeholder */ }
+  stealIntrigueFromRichPlayers(thiefPlayerId, victimChoiceCriteria) { /* Placeholder */ }
+  acquireReserveCard(playerId, cardId) { /* Placeholder */ }
+}
 
- // Export the class for use in other modules (if using Node.js or similar)
- // module.exports = DuneImperiumGame; // Uncomment if using CommonJS modules
+// Export the class for use in other modules (if using Node.js or similar)
+// module.exports = DuneImperiumGame;
 -
 -// Example usage (for testing or integration)
 -/*

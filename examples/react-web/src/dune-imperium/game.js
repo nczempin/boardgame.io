@@ -78,15 +78,47 @@ const DuneImperiumClient = {
     },
 
     passCombatIntrigue: (G, ctx, playerId) => {
-      // This move is for when a player chooses not to play a combat intrigue card
-      // during the combat phase when it's their turn to do so.
-      // The core game logic (G.core) would need to track whose turn it is for combat intrigues
-      // and if they have passed. For now, this client-side move exists for the AI to call.
       G.core.log(`Player ${playerId} passes playing a combat intrigue card.`);
-      // TODO: Add state to G.core.players[playerId] like .hasPassedCombatIntrigue = true;
-      // TODO: The core combat phase logic should then advance to the next player for combat intrigues,
-      // or conclude the intrigue segment if all relevant players have passed.
+      // TODO: G.core state update for passing combat intrigue
     },
+
+    // Moves for Paul Atreides' left-side ability (peeking at top card)
+    paulBottomDeckCard: (G, ctx, playerId) => {
+        if (ctx.currentPlayer !== playerId.toString()) return;
+        G.core.paulBottomDeckCard(playerId);
+    },
+    paulKeepTopCard: (G, ctx, playerId) => {
+        if (ctx.currentPlayer !== playerId.toString()) return;
+        G.core.paulKeepTopCard(playerId);
+    },
+
+    // Decision moves
+    decideOptionalCost: (G, ctx, playerId, cardName, accept) => {
+        if (ctx.currentPlayer !== playerId.toString()) return;
+        G.core.decideOptionalCost(playerId, cardName, accept);
+    },
+    selectPlayerTarget: (G, ctx, playerId, sourceCardId, targetPlayerId) => {
+        if (ctx.currentPlayer !== playerId.toString()) return;
+        // For AI, targetData might be bundled if AI makes multi-step choices in one go.
+        // For humans, this is a distinct step.
+        // The core logic might require more specific targetData for effects like Poison Snooper's card choice.
+        // This client move assumes the AI pre-calculates full targetData if needed.
+        // Or, the core logic will set another pendingDecision if more info is needed (e.g. select card from hand).
+        const targetData = { targetPlayerId };
+        G.core.selectPlayerTarget(playerId, sourceCardId, targetPlayerId, targetData); // Pass targetData for AI consistency
+    },
+    selectCardFromHand: (G, ctx, playerId, sourceCardId, targetPlayerId, selectedCardIdToDiscard) => {
+        if (ctx.currentPlayer !== playerId.toString()) return;
+        G.core.selectCardFromHand(playerId, sourceCardId, targetPlayerId, selectedCardIdToDiscard);
+    },
+    selectAgentLocation: (G, ctx, playerId, sourceCardId, locationId) => {
+        if (ctx.currentPlayer !== playerId.toString()) return;
+        G.core.selectAgentLocation(playerId, sourceCardId, locationId);
+    },
+    decideTroopDeployment: (G, ctx, playerId, locationId, numberOfTroops) => {
+        if (ctx.currentPlayer !== playerId.toString()) return;
+        G.core.decideTroopDeployment(playerId, locationId, numberOfTroops);
+    }
   },
 
   // Turn order logic. boardgame.io handles basic turn progression.

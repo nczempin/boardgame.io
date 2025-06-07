@@ -76,10 +76,11 @@ class DuneImperiumBoard extends React.Component {
       return <div>Loading or game not ready... Player ID: {playerID}</div>;
     }
 
-    const currentPlayer = game.players[playerID]; // Data for the viewing player
-    if (!currentPlayer) {
+    const viewingPlayer = game.players[playerID]; // Data for the viewing player
+    if (!viewingPlayer) {
         return <div>Error: Player data not found for player ID {playerID}.</div>;
     }
+    const leader = viewingPlayer.leader;
 
 
     return (
@@ -89,31 +90,63 @@ class DuneImperiumBoard extends React.Component {
 
         {/* Player Information */}
         <div className="player-info">
-          <h2>Your Stats ({currentPlayer.name})</h2>
-          <p>Resources: Spice: {currentPlayer.resources.spice}, Solari: {currentPlayer.resources.solari}, Water: {currentPlayer.resources.water}</p>
-          <p>Influence: Fremen: {currentPlayer.influence.fremen}, Bene Gesserit: {currentPlayer.influence.beneGesserit}, Spacing Guild: {currentPlayer.influence.spacingGuild}, Emperor: {currentPlayer.influence.emperor}</p>
-          <p>Victory Points: {currentPlayer.victoryPoints}</p>
-          <p>Agents available: {currentPlayer.agents}</p>
-          <p>Troops in Garrison: {currentPlayer.garrison.count}</p>
-          <p>Active Combat Units: {currentPlayer.activeCombatUnits}</p>
+          <h2>Your Stats ({viewingPlayer.name})</h2>
+          {leader && (
+            <div className="leader-info">
+              <h3>Leader: {leader.name}</h3>
+              <p><em>Left Ability:</em> {leader.leftAbilityText}</p>
+              <p><em>Signet Ability:</em> {leader.signetAbilityText}</p>
+            </div>
+          )}
+          <p>Resources: Spice: {viewingPlayer.resources.spice}, Solari: {viewingPlayer.resources.solari}, Water: {viewingPlayer.resources.water}</p>
+          <p>Influence: Fremen: {viewingPlayer.influence.fremen}, Bene Gesserit: {viewingPlayer.influence.beneGesserit}, Spacing Guild: {viewingPlayer.influence.spacingGuild}, Emperor: {viewingPlayer.influence.emperor}</p>
+          <p>Victory Points: {viewingPlayer.victoryPoints}</p>
+          <p>Agents available: {viewingPlayer.agents}</p>
+          <p>Troops in Garrison: {viewingPlayer.garrison.count}</p>
+          <p>Active Combat Units: {viewingPlayer.activeCombatUnits}</p>
+          {viewingPlayer.paulTopCardInfo && isActive && (
+            <div className="paul-peek-action">
+              <p>Paul's Vision: Top card of your deck is <strong>{viewingPlayer.paulTopCardInfo.name}</strong>.</p>
+              <button onClick={() => this.props.moves.paulKeepTopCard(playerID)}>Keep on Top</button>
+              <button onClick={() => this.props.moves.paulBottomDeckCard(playerID)}>Place on Bottom</button>
+            </div>
+          )}
         </div>
 
         {/* Player Hand */}
         <div className="player-hand">
-          <h3>Your Hand:</h3>
-          {currentPlayer.hand.map(card => (
-            <div key={card.id} className="card" onClick={() => this.handleCardClick(card.id)}>
-              <strong>{card.name}</strong> ({card.type}) - Cost: {card.cost || 'N/A'} <br/> Effect: {card.effect}
+          <h3>Your Hand (Imperium/Starting Cards):</h3>
+          {viewingPlayer.hand.map(card => (
+            <div key={card.id} className="card" onClick={() => this.handleCardClick(card.id)} title={`Agent: ${card.agentEffectText || 'None'} | Reveal: ${card.revealEffectText || 'None'}`}>
+              <strong>{card.name}</strong> ({card.type}) - Cost: {card.cost || 'N/A'} <br/> Icons: {card.agentIcons ? card.agentIcons.join(', ') : 'N/A'}
+              <p style={{fontSize: '0.8em', margin: '2px 0'}}>A: {card.agentEffectText || 'None'}</p>
+              <p style={{fontSize: '0.8em', margin: '2px 0'}}>R: {card.revealEffectText || 'None'}</p>
             </div>
           ))}
         </div>
+
+        {/* Intrigue Cards */}
+        {viewingPlayer.intrigueCards && viewingPlayer.intrigueCards.length > 0 && (
+            <div className="intrigue-cards-hand">
+                <h3>Your Intrigue Cards:</h3>
+                {viewingPlayer.intrigueCards.map(card => (
+                    <div key={card.id} className="card intrigue-card" title={card.effectText}>
+                        <strong>{card.name}</strong> ({card.intrigueType})
+                        <p style={{fontSize: '0.8em', margin: '2px 0'}}>{card.effectText}</p>
+                        {isActive && <button onClick={() => this.props.moves.playIntrigueCard(parseInt(playerID), card.id)}>Play Intrigue</button>}
+                    </div>
+                ))}
+            </div>
+        )}
 
         {/* Imperium Row */}
         <div className="imperium-row">
             <h3>Imperium Row (Purchase cards here):</h3>
             {game.imperiumRow.map(card => (
-                 <div key={card.id} className="card imperium-card" onClick={() => this.handlePurchaseClick(card.id)}>
-                    <strong>{card.name}</strong> ({card.type}) - Cost: {card.cost} <br/> Effect: {card.effect} <br/> Persuasion: {card.persuasion}, Faction: {card.factionIcon}
+                 <div key={card.id} className="card imperium-card" onClick={() => this.handlePurchaseClick(card.id)} title={`Agent: ${card.agentEffectText || 'None'} | Reveal: ${card.revealEffectText || 'None'}`}>
+                    <strong>{card.name}</strong> ({card.type}) - Cost: {card.cost} <br/> Persuasion: {card.revealEffect ? card.revealEffect.persuasion || 0 : (card.persuasion || 0)}, Swords: {card.revealEffect ? card.revealEffect.swords || 0 : (card.swords || 0)}
+                    <p style={{fontSize: '0.8em', margin: '2px 0'}}>A: {card.agentEffectText || 'None'}</p>
+                    <p style={{fontSize: '0.8em', margin: '2px 0'}}>R: {card.revealEffectText || 'None'}</p>
                  </div>
             ))}
         </div>
@@ -143,14 +176,30 @@ class DuneImperiumBoard extends React.Component {
             ) : <p>No conflict active.</p>}
         </div>
 
-        {/* Actions */}
+        {/* Actions & Pending Decisions */}
         {isActive && (
           <div className="player-actions">
             <h3>Actions:</h3>
-            {/* More specific action buttons will be needed here, e.g. selecting a card then a location */}
-            <button onClick={this.handleRevealButtonClick} disabled={currentPlayer.agents > 0 || game.gamePhase !== 'playerTurn'}>Reveal Turn</button>
-            <button onClick={this.handleEndTurnActionsClick}>End Turn Actions / Pass</button>
-            {/* TODO: Add buttons for committing troops, playing intrigue cards etc. */}
+            {viewingPlayer.pendingDecision ? (
+              this.renderPendingDecision()
+            ) : (
+              <>
+                {/* Standard action buttons only if no pending decision */}
+                <button
+                    onClick={this.handleRevealButtonClick}
+                    disabled={viewingPlayer.agents > 0 || game.gamePhase !== 'playerTurn' || viewingPlayer.hasPassedReveal}
+                >
+                    Reveal Turn
+                </button>
+                <button
+                    onClick={this.handleEndTurnActionsClick}
+                    disabled={game.gamePhase !== 'playerTurn'}
+                >
+                    End Turn Actions / Pass
+                </button>
+                {/* TODO: Add buttons for committing troops (now part of deploy decision), playing intrigue cards (some are auto, some need target) */}
+              </>
+            )}
           </div>
         )}
 
