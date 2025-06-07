@@ -29,7 +29,7 @@ const DuneImperiumClient = {
       if (ctx.currentPlayer !== playerId.toString()) {
         console.error("It's not player " + playerId + "'s turn. Current player: " + ctx.currentPlayer);
         // Optionally, return INVALID_MOVE from boardgame.io/core if the move is illegal
-        return; // Or handle error appropriately
+        return INVALID_MOVE; // Indicate illegal move to boardgame.io
       }
       const success = G.core.placeAgent(playerId, cardId, locationId);
       if (!success) {
