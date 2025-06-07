@@ -1,0 +1,103 @@
+/* examples/react-web/src/dune-imperium/dune-imperium.css */
+
+.dune-imperium-board {
+  font-family: Arial, sans-serif;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.player-info,
+.player-hand,
+.imperium-row,
+.board-locations,
+.conflict-zone,
+.player-actions,
+.game-log,
+.game-over-message {
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+}
+
+.player-info h2,
+.player-hand h3,
+.imperium-row h3,
+.board-locations h3,
+.conflict-zone h3,
+.player-actions h3 {
+  margin-top: 0;
+}
+
+.card {
+  border: 1px solid #ddd;
+  padding: 8px;
+  margin: 5px;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+.card:hover {
+  box-shadow: 0 0 5px rgba(0,0,0,0.2);
+}
+
+.imperium-card {
+  background-color: #e8f4fd; /* Light blue for imperium cards */
+}
+
+.conflict-card {
+    background-color: #fde8e8; /* Light red for conflict card */
+}
+
+.location {
+  border: 1px solid #eee;
+  padding: 8px;
+  margin: 5px;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+  cursor: pointer;
+}
+
+.location:hover {
+  background-color: #e9e9e9;
+}
+
+.player-actions button {
+  margin: 5px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+}
+
+.player-actions button:hover {
+  background-color: #0056b3;
+}
+
+.player-actions button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.game-over-message {
+  background-color: #d4edda; /* Greenish for success/game over */
+  color: #155724;
+  text-align: center;
+}
+
+/* Basic layout for sections within the board */
+.player-hand, .imperium-row {
+    display: flex;
+    flex-wrap: wrap; /* Allow cards to wrap to next line */
+}
+.board-locations {
+    display: grid; /* Use grid for locations for better alignment */
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* Responsive columns */
+    gap: 10px;
+}

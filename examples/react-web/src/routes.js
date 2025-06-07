@@ -15,8 +15,13 @@ import lobby from './lobby';
 import simulator from './simulator';
 import redacted_move from './redacted-move';
 import undo from './undo';
+import dune_imperium from './dune-imperium';
 
 const routes = [
+  {
+    name: 'Dune: Imperium',
+    routes: dune_imperium.routes,
+  },
   {
     name: 'Tic-Tac-Toe',
     routes: tic_tac_toe.routes,
