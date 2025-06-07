@@ -28,18 +28,22 @@ class DuneImperiumBoard extends React.Component {
     console.log(`Location ${locationId} clicked by player ${this.props.playerID}`);
     // For now, let's make a dummy move if one is available
     // In a real scenario, we'd get cardId from player's hand selection
-    if (this.props.G.core && this.props.G.core.players[this.props.playerID] && this.props.G.core.players[this.props.playerID].hand.length > 0) {
-        const cardId = this.props.G.core.players[this.props.playerID].hand[0].id; // DANGER: just taking first card
-        // this.props.moves.placeAgent(parseInt(this.props.playerID), cardId, locationId);
+    if (this.props.G.core && this.props.G.core.players[this.props.playerID]) {
+        const selectedCard = this.state.selectedCard; // Use selected card from state
+        if (selectedCard) {
+            this.props.moves.placeAgent(parseInt(this.props.playerID), selectedCard, locationId);
+        } else {
+            console.log("No card selected to make a move.");
+        }
     } else {
-        console.log("No card in hand or player not found to make a move.");
+        console.log("Player not found or invalid game state.");
     }
   };
 
   handleCardClick = (cardId) => {
     if (!this.props.isActive) return;
     console.log(`Card ${cardId} clicked by player ${this.props.playerID}`);
-    // Example: this.setState({ selectedCard: cardId });
+    this.setState({ selectedCard: cardId }); // Update selected card state
   }
 
   handlePurchaseClick = (cardId) => {
