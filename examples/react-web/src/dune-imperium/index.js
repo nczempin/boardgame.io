@@ -1,21 +1,14 @@
 // examples/react-web/src/dune-imperium/index.js
-import Singleplayer from './singleplayer';
-// Future: import Multiplayer from './multiplayer';
+import { Game } from 'boardgame.io/core';
+import DuneImperiumGame from '../../../games/dune-imperium/game'; // Adjust path as necessary
+import DuneImperiumBoard from './board'; // Will be created
+import { DuneImperiumClient } from './game'; // Will be created
 
-// This defines the routes for the Dune: Imperium game examples.
-// For now, we only have a singleplayer (hotseat) mode.
-const routes = [
-  {
-    path: '/dune-imperium/singleplayer', // URL path
-    text: 'Dune: Imperium (Hotseat)',    // Text for the link in the main navigation
-    component: Singleplayer,         // The React component to render
-  },
-  // Example for future multiplayer route:
-  // {
-  //   path: '/dune-imperium/multiplayer',
-  //   text: 'Dune: Imperium (Multiplayer)',
-  //   component: Multiplayer,
-  // },
-];
+// This configures the game for the Lobby
+const routes = [{
+  path: '/dune-imperium',
+  text: 'Dune: Imperium',
+  component: DuneImperiumClient, // The client wrapper
+}];
 
-export default { routes };
+export default routes;

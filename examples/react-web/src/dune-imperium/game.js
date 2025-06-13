@@ -1,152 +1,101 @@
 // examples/react-web/src/dune-imperium/game.js
-import { DuneImperiumGame } from '../../../../src/games/dune-imperium/game'; // Adjust path as needed
+import { Client } from 'boardgame.io/react';
+import DuneImperiumGame from '../../../games/dune-imperium/game'; // Path to the core game logic
+import DuneImperiumBoard from './board'; // Path to the React board component
 
-// This client-side game object will wrap the core DuneImperiumGame logic
-// for use with boardgame.io.
+// DuneImperiumClient wraps the core game logic for the client-side.
+// It defines how moves are called from the UI and passes them to the core game.
+export class DuneImperiumClientObj {
+  constructor( G, ctx, playerID, ...plugins ) {
+    this.G = G; // Game state
+    this.ctx = ctx; // Turn order, game phase, etc.
+    this.playerID = playerID; // Current player's ID
 
-const DuneImperiumClient = {
-  name: 'dune-imperium',
-
-  // The setup function needs to return the initial game state.
-  // We'll instantiate our DuneImperiumGame class here.
-  setup: (ctx) => {
-    const game = new DuneImperiumGame(ctx.numPlayers); // ctx.numPlayers will be provided by boardgame.io
-    // The state `G` for boardgame.io will be the instance of our game class.
-    // We might need to serialize or transform parts of it if it's too complex
-    // or contains non-plain objects, but let's start with the direct instance.
-    return {
-        core: game, // G.core will hold our game engine instance
-        // We can add other client-specific state here if needed
+    // Define client-side moves. These typically call methods on G.core (the DuneImperiumGame instance)
+    // For now, we'll keep this minimal. As we add UI interactions, we'll add more moves here.
+    this.moves = {
+      placeAgent: (cardId, locationId, agentDecisionData = {}) => {
+        this.G.core.placeAgent(this.playerID, cardId, locationId, agentDecisionData);
+      },
+      revealTurn: (cardIdsToPlay) => {
+        this.G.core.revealTurn(this.playerID, cardIdsToPlay);
+      },
+      purchaseCard: (cardId) => {
+        this.G.core.purchaseCard(this.playerID, cardId);
+      },
+      playIntrigueCard: (cardId, targetData = {}) => {
+        this.G.core.playIntrigueCard(this.playerID, cardId, targetData);
+      },
+      endTurnActions: () => {
+        this.G.core.endPlayerTurnActions(this.playerID); // playerID might not be needed by core logic here
+      },
+      endPlayerTurnActions: () => { // Alias or specific if reveal phase pass
+        this.G.core.endPlayerTurnActions(this.playerID);
+      },
+      // --- Decision Moves ---
+      decideOptionalCost: (cardId, source, accept) => {
+        this.G.core.decideOptionalCost(this.playerID, cardId, source, accept);
+      },
+      selectPlayerTarget: (cardId, source, selectedTargetPlayerId) => {
+        // The core game's selectPlayerTarget expects an array for the last argument.
+        this.G.core.selectPlayerTarget(this.playerID, cardId, source, [selectedTargetPlayerId]);
+      },
+      selectCardFromPlayerZone: (cardId, source, fromPlayerId, fromZone, selectedCardIds) => {
+        this.G.core.selectCardFromPlayerZone(this.playerID, cardId, source, fromPlayerId, fromZone, selectedCardIds);
+      },
+      selectAgentLocation: (cardId, locationId) => {
+        this.G.core.selectAgentLocation(this.playerID, cardId, locationId);
+      },
+      decideTroopDeployment: (locationId, numberOfTroops) => {
+        this.G.core.decideTroopDeployment(this.playerID, locationId, numberOfTroops);
+      },
+      baronInitialInfluence: (chosenFactions) => {
+        this.G.core.baronInitialInfluence(this.playerID, chosenFactions);
+      },
+      decideLetoSignet: (accept, chosenFaction) => {
+        this.G.core.decideLetoSignet(this.playerID, accept, chosenFaction);
+      },
+      decideBaronSignet: (accept) => {
+        this.G.core.decideBaronSignet(this.playerID, accept);
+      },
+      decideThorvaldHighCouncil: (chosenFaction) => {
+        this.G.core.decideThorvaldHighCouncil(this.playerID, chosenFaction);
+      },
+      decideSardaukarDeployment: (cardId, numToDeploy) => {
+        this.G.core.decideSardaukarDeployment(this.playerID, cardId, numToDeploy);
+      },
+      resolveTheVoiceChoice: (cardId, choice, targetPlayerId = null) => {
+        this.G.core.resolveTheVoiceChoice(this.playerID, cardId, choice, targetPlayerId);
+      },
+      resolveTrashCardChoice: (cardId, cardToTrashId, trashSource) => {
+        this.G.core.resolveTrashCardChoice(this.playerID, cardId, cardToTrashId, trashSource);
+      },
+      paulBottomDeckCard: () => {
+        this.G.core.paulBottomDeckCard(this.playerID);
+      },
+      paulKeepTopCard: () => {
+        this.G.core.paulKeepTopCard(this.playerID);
+      }
+      // Add other moves as needed
     };
-  },
+    // Initialize plugins if any - none for now
+    // plugins.forEach(plugin => plugin.init(this));
+  }
 
-  // Define the moves that players can make.
-  // These will call methods on the `G.core` (DuneImperiumGame instance).
-  moves: {
-    // Example: placeAgent move
-    placeAgent: (G, ctx, playerId, cardId, locationId) => {
-      // Ensure it's the current player making the move (boardgame.io might handle some of this)
-      if (ctx.currentPlayer !== playerId.toString()) {
-        console.error("It's not player " + playerId + "'s turn. Current player: " + ctx.currentPlayer);
-        // Optionally, return INVALID_MOVE from boardgame.io/core if the move is illegal
-        return INVALID_MOVE; // Indicate illegal move to boardgame.io
-      }
-      const success = G.core.placeAgent(playerId, cardId, locationId);
-      if (!success) {
-        // Handle failed action e.g. by logging or returning an error state
-        console.error(`Player ${playerId} failed to place agent with card ${cardId} at ${locationId}`);
-        // Consider using boardgame.io's INVALID_MOVE for better feedback
-      }
-      // boardgame.io will automatically update G if G.core's state changed.
-      // If DuneImperiumGame methods don't directly mutate but return new state,
-      // you might need to do G.core = newCoreState;
-    },
+  // Helper to get the current player's object from G
+  get player() {
+    return this.G.core.players[this.playerID];
+  }
+}
 
-    revealTurn: (G, ctx, playerId, cardIdsToPlay) => {
-      if (ctx.currentPlayer !== playerId.toString()) return; // Basic turn check
-      G.core.revealTurn(playerId, cardIdsToPlay);
-    },
-
-    purchaseCard: (G, ctx, playerId, cardId) => {
-      if (ctx.currentPlayer !== playerId.toString()) return;
-      G.core.purchaseCard(playerId, cardId);
-    },
-
-    commitTroopsToCombat: (G, ctx, playerId, numberOfTroops) => {
-      // This might not always be tied to currentPlayer if it's a reaction or out-of-turn action.
-      // For now, assume it's part of the current player's turn actions after reveal.
-      if (ctx.currentPlayer !== playerId.toString()) return;
-      G.core.commitTroopsToCombat(playerId, numberOfTroops);
-    },
-
-    playIntrigueCard: (G, ctx, playerId, cardId) => {
-      // Intrigue cards can often be played outside of normal turn order,
-      // or by players other than the current player.
-      // The core game logic (G.core.playIntrigueCard) should validate this.
-      G.core.playIntrigueCard(playerId, cardId);
-    },
-
-    // This special move is called by boardgame.io automatically at the end of a player's turn actions.
-    // We need to decide if we want to manually call phase transitions or if boardgame.io's turn order is enough.
-    // For Dune: Imperium, a turn has multiple steps (agent, then reveal).
-    // We might need a "pass" or "endRevealPhase" move.
-    // Let's assume for now that after a player does their main actions, they might click an "End Turn" button
-    // which could trigger a sequence of phase changes if all agents are played.
-    endTurnActions: (G, ctx, playerId) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        G.core.endPlayerTurnActions();
-    },
-
-    passCombatIntrigue: (G, ctx, playerId) => {
-      G.core.log(`Player ${playerId} passes playing a combat intrigue card.`);
-      // TODO: G.core state update for passing combat intrigue
-    },
-
-    // Moves for Paul Atreides' left-side ability (peeking at top card)
-    paulBottomDeckCard: (G, ctx, playerId) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        G.core.paulBottomDeckCard(playerId);
-    },
-    paulKeepTopCard: (G, ctx, playerId) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        G.core.paulKeepTopCard(playerId);
-    },
-
-    // Decision moves
-    decideOptionalCost: (G, ctx, playerId, cardName, accept) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        G.core.decideOptionalCost(playerId, cardName, accept);
-    },
-    selectPlayerTarget: (G, ctx, playerId, sourceCardId, targetPlayerId) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        // For AI, targetData might be bundled if AI makes multi-step choices in one go.
-        // For humans, this is a distinct step.
-        // The core logic might require more specific targetData for effects like Poison Snooper's card choice.
-        // This client move assumes the AI pre-calculates full targetData if needed.
-        // Or, the core logic will set another pendingDecision if more info is needed (e.g. select card from hand).
-        const targetData = { targetPlayerId };
-        G.core.selectPlayerTarget(playerId, sourceCardId, targetPlayerId, targetData); // Pass targetData for AI consistency
-    },
-    selectCardFromHand: (G, ctx, playerId, sourceCardId, targetPlayerId, selectedCardIdToDiscard) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        G.core.selectCardFromHand(playerId, sourceCardId, targetPlayerId, selectedCardIdToDiscard);
-    },
-    selectAgentLocation: (G, ctx, playerId, sourceCardId, locationId) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        G.core.selectAgentLocation(playerId, sourceCardId, locationId);
-    },
-    decideTroopDeployment: (G, ctx, playerId, locationId, numberOfTroops) => {
-        if (ctx.currentPlayer !== playerId.toString()) return;
-        G.core.decideTroopDeployment(playerId, locationId, numberOfTroops);
-    }
-  },
-
-  // Turn order logic. boardgame.io handles basic turn progression.
-  // We need to define when a turn ends and potentially manage phases within a turn.
-  turn: {
-    // Dune: Imperium has distinct phases within a player's turn (Agent phase, Reveal phase).
-    // boardgame.io's basic turn order might need to be augmented with game-specific phase management.
-    // For now, let's assume a player makes one or more moves and then the turn passes.
-    // The `endIf` below, along with G.core.gamePhase, will manage overall game flow.
-    // onEnd: (G, ctx) => { /* This is called when a player's turn officially ends */ },
-    // order: { /* custom turn order if needed */ }
-
-    // Let the core game logic (G.core.gamePhase) dictate what can be done.
-    // Moves should check G.core.gamePhase and G.core.currentPlayerIndex.
-  },
-
-  // Defines when the game ends.
-  endIf: (G, ctx) => {
-    if (G.core.gamePhase === 'gameOver') {
-      const winner = G.core.players.find(p => p.victoryPoints >= 10); // Simplified
-      if (winner) return { winner: winner.name };
-      // Could also return scores for all players
-      return { gameOver: true, scores: G.core.players.map(p => ({name: p.name, vp: p.victoryPoints})) };
-    }
-  },
-
-  // AI configuration is now sourced from the core game class.
-  ai: DuneImperiumGame.ai,
-};
+// This is the main export for the boardgame.io Client.
+export const DuneImperiumClient = Client({
+  game: DuneImperiumGame, // The core game object
+  board: DuneImperiumBoard, // The React component for the board
+  client: DuneImperiumClientObj, // The client-side move controller
+  multiplayer: { server: 'localhost:8000' }, // Example for local multiplayer
+  // ai: DuneImperiumGame.ai, // If AI is defined as a static property on the game class
+  debug: true,
+});
 
 export default DuneImperiumClient;

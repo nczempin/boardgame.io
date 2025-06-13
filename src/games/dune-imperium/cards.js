@@ -9,21 +9,21 @@ export const IMPERIUM_CARDS = {
     type: "Imperium",
     agentIcons: ["Military", "Emperor"],
     agentEffectText: "Deploy 3 troops to your garrison. You may deploy 2 additional troops from your garrison to the conflict.",
-    revealEffectText: "",
-    agentEffect: { recruit: { count: 3, toConflict: false }, deployFromGarrison: 2 },
-    revealEffect: { persuasion: 0, swords: 0 },
-    tags: ["Military"],
+    revealEffectText: "Mandatory: Deploy at least 1 troop from your garrison to any combat space (if able).",
+    agentEffect: { recruit: { count: 3, toConflict: false }, deployFromGarrisonOptional: 2 },
+    revealEffect: { custom: "sardaukar_reveal_deploy" },
+    tags: ["Military", "Emperor"],
   },
-  fremenWarriors: {
-    id: "imp_fremen_warriors",
-    name: "Fremen Warriors",
+  fedaykinDeathCommando: {
+    id: "imp_fedaykin_death_commando",
+    name: "Fedaykin Death Commando",
     cost: 4,
     type: "Imperium",
     agentIcons: ["Military", "Fremen"],
     agentEffectText: "Deploy 2 troops to your garrison. Gain 1 Spice.",
-    revealEffectText: "",
+    revealEffectText: "Fremen Bond: Gain +3 Swords if you have 2 or more Fremen influence. Otherwise, gain +1 Sword.",
     agentEffect: { recruit: { count: 2, toConflict: false }, resources: { spice: 1 } },
-    revealEffect: { persuasion: 0, swords: 0 },
+    revealEffect: { custom: "fedaykin_bond" },
     tags: ["Military", "Fremen"],
   },
   hardyWarriors: {
@@ -31,10 +31,22 @@ export const IMPERIUM_CARDS = {
     name: "Hardy Warriors",
     cost: 3,
     type: "Imperium",
-    agentIcons: ["Military", "Any"], // Generic military icon
+    agentIcons: ["Military", "Any"],
     agentEffectText: "Deploy 2 troops to your garrison.",
     revealEffectText: "Gain 2 Swords.",
     agentEffect: { recruit: { count: 2, toConflict: false } },
+    revealEffect: { persuasion: 0, swords: 2 },
+    tags: ["Military"],
+  },
+  eliteGuards: {
+    id: "imp_elite_guards",
+    name: "Elite Guards",
+    cost: 5,
+    type: "Imperium",
+    agentIcons: ["Military", "Any"],
+    agentEffectText: "Deploy 3 troops to your garrison.",
+    revealEffectText: "Gain 2 Swords.",
+    agentEffect: { recruit: { count: 3, toConflict: false } },
     revealEffect: { persuasion: 0, swords: 2 },
     tags: ["Military"],
   },
@@ -45,10 +57,10 @@ export const IMPERIUM_CARDS = {
     name: "CHOAM Directorship",
     cost: 6,
     type: "Imperium",
-    agentIcons: ["Wealth", "CHOAM"], // CHOAM/Wealth icon
-    agentEffectText: "Gain 1 Spice for each CHOAM space you have an agent on (including this one).", // Complex, needs G access
+    agentIcons: ["Wealth", "CHOAM"],
+    agentEffectText: "Gain 1 Spice for each CHOAM space you have an agent on (including this one).",
     revealEffectText: "Gain 1 Persuasion and 3 Solari.",
-    agentEffect: { custom: "choam_directorship_agent" }, // Requires custom logic
+    agentEffect: { custom: "choam_directorship_agent" },
     revealEffect: { persuasion: 1, resources: { solari: 3 } },
     tags: ["Economic", "CHOAM"],
   },
@@ -62,7 +74,7 @@ export const IMPERIUM_CARDS = {
     revealEffectText: "Gain 1 Persuasion.",
     agentEffect: { resources: { spice: 2 } },
     revealEffect: { persuasion: 1 },
-    tags: ["Economic", "CHOAM", "Tech"], // Example Tech tag
+    tags: ["Economic", "CHOAM", "Tech"],
   },
   guildBank: {
     id: "imp_guild_bank",
@@ -72,13 +84,50 @@ export const IMPERIUM_CARDS = {
     agentIcons: ["Spacing Guild", "Wealth"],
     agentEffectText: "Gain 3 Solari. You may pay 2 Spice to gain an additional 3 Solari.",
     revealEffectText: "",
-    agentEffect: { resources: { solari: 3 }, optionalCost: { resources: {spice: 2}, benefit: { resources: {solari: 3}}} },
+    agentEffect: { resources: { solari: 3 }, optionalCost: { cost: {spice: 2}, benefit: { resources: {solari: 3}}} },
     revealEffect: { persuasion: 0, swords: 0 },
     tags: ["Economic", "Spacing Guild"],
   },
+  smugglingOperation: {
+    id: "imp_smuggling_operation",
+    name: "Smuggling Operation",
+    cost: 3,
+    type: "Imperium",
+    agentIcons: ["Wealth", "Any"],
+    agentEffectText: "Gain 2 Spice.",
+    revealEffectText: "Gain 1 Persuasion.",
+    agentEffect: { resources: { spice: 2 } },
+    revealEffect: { persuasion: 1 },
+    tags: ["Economic"],
+  },
+  choamShares: {
+    id: "imp_choam_shares",
+    name: "CHOAM Shares",
+    cost: 6,
+    type: "Imperium",
+    agentIcons: ["Wealth", "CHOAM"],
+    agentEffectText: "Gain 4 Solari.",
+    revealEffectText: "Gain 2 Persuasion.",
+    agentEffect: { resources: { solari: 4 } },
+    revealEffect: { persuasion: 2 },
+    tags: ["Economic", "CHOAM"],
+  },
+  processingStation: {
+    id: "imp_processing_station",
+    name: "Processing Station",
+    cost: 5,
+    type: "Imperium",
+    agentIcons: ["CHOAM", "Tech"],
+    agentEffectText: "Gain 3 Spice.",
+    revealEffectText: "Gain 1 Persuasion.",
+    agentEffect: { resources: { spice: 3 } },
+    revealEffect: { persuasion: 1 },
+    tags: ["Economic", "CHOAM", "Tech"],
+  },
+
 
   // Faction
-  beneGesseritInitiateCard: { // Renamed from just "Bene Gesserit Initiate" to avoid conflict with starting card
+  beneGesseritInitiateCard: {
     id: "imp_bene_gesserit_initiate",
     name: "Bene Gesserit Initiate",
     cost: 2,
@@ -86,9 +135,21 @@ export const IMPERIUM_CARDS = {
     agentIcons: ["Bene Gesserit", "Any"],
     agentEffectText: "Trash a card from your hand or discard pile. Then, draw a card.",
     revealEffectText: "Gain 1 Persuasion.",
-    agentEffect: { custom: "bene_gesserit_initiate_agent" }, // Requires custom logic for trashing/drawing
+    agentEffect: { custom: "bene_gesserit_initiate_agent" },
     revealEffect: { persuasion: 1 },
     tags: ["Bene Gesserit"],
+  },
+  sietchReverendMother: {
+    id: "imp_sietch_reverend_mother",
+    name: "Sietch Reverend Mother",
+    cost: 7,
+    type: "Imperium",
+    agentIcons: ["Bene Gesserit", "Fremen"],
+    agentEffectText: "Gain 1 VP. You may trash up to 2 cards from your hand or discard pile.",
+    revealEffectText: "Gain 1 Persuasion.",
+    agentEffect: { vp: 1, custom: "sietch_reverend_mother_trash" },
+    revealEffect: { persuasion: 1 },
+    tags: ["Bene Gesserit", "Fremen", "VP"],
   },
   guildNavigator: {
     id: "imp_guild_navigator",
@@ -108,37 +169,86 @@ export const IMPERIUM_CARDS = {
     cost: 2,
     type: "Imperium",
     agentIcons: ["Fremen", "Any"],
-    agentEffectText: "Gain 1 Water.",
+    agentEffectText: "Gain 1 Water. You may pay 2 Spice to deploy 2 troops to your garrison.",
     revealEffectText: "Gain 1 Sword.",
-    agentEffect: { resources: { water: 1 } },
+    agentEffect: { resources: { water: 1 }, optionalCost: { cost: { spice: 2 }, benefit: { recruit: { count: 2, toConflict: false } } } },
     revealEffect: { persuasion: 0, swords: 1 },
-    tags: ["Fremen"],
+    tags: ["Fremen", "Military"],
+  },
+  imperialMinister: {
+    id: "imp_imperial_minister",
+    name: "Imperial Minister",
+    cost: 3,
+    type: "Imperium",
+    agentIcons: ["Emperor", "Any"],
+    agentEffectText: "Gain 2 Solari. Draw 1 card.",
+    revealEffectText: "Gain 1 Persuasion.",
+    agentEffect: { resources: { solari: 2 }, draw: 1 },
+    revealEffect: { persuasion: 1 },
+    tags: ["Emperor", "Economic"],
   },
 
-  // Utility
+
+  // Utility & Character Cards
   stillsuit: {
     id: "imp_stillsuit",
     name: "Stillsuit",
     cost: 1,
     type: "Imperium",
-    agentIcons: ["Any", "Tech"], // Generic icon, also Tech
-    agentEffectText: "If you deployed an agent to a desert space (Arrakeen, Carthag, Sietch Tabr, Imperial Basin, Hagga Basin), gain 1 Water.",
+    agentIcons: ["Any", "Tech"],
+    agentEffectText: "If you deployed an agent to a desert space, gain 1 Water.",
     revealEffectText: "",
-    agentEffect: { custom: "stillsuit_agent" }, // Requires custom logic checking location type
+    agentEffect: { custom: "stillsuit_agent" },
     revealEffect: { persuasion: 0, swords: 0 },
     tags: ["Tech"],
   },
   duncanIdaho: {
     id: "imp_duncan_idaho",
     name: "Duncan Idaho",
-    cost: 5,
+    cost: 4,
     type: "Imperium",
-    agentIcons: ["Military", "Loyalty"], // Atreides-aligned typically
-    agentEffectText: "You may pay 1 Water to deploy 1 troop to your garrison and draw 1 card.",
+    agentIcons: ["City", "Fremen"],
+    agentEffectText: "Draw 1 card. THEN, you may pay 1 Water to deploy 1 troop to your garrison and draw 1 additional card.",
     revealEffectText: "Gain 2 Swords.",
-    agentEffect: { optionalCost: { resources: {water: 1}, benefit: { recruit: { count: 1, toConflict: false}, draw: 1 }}},
+    agentEffect: { draw: 1, optionalCost: { cost: { water: 1 }, benefit: { recruit: { count: 1, toConflict: false }, draw: 1 } } },
     revealEffect: { persuasion: 0, swords: 2 },
-    tags: ["Military"],
+    tags: ["Military", "Character", "Atreides"],
+  },
+  gurneyHalleck: {
+    id: "imp_gurney_halleck",
+    name: "Gurney Halleck",
+    cost: 4,
+    type: "Imperium",
+    agentIcons: ["Military", "Atreides"],
+    agentEffectText: "Recruit 2 troops to your garrison.",
+    revealEffectText: "You may pay 3 Solari to recruit 2 troops to your garrison.",
+    agentEffect: { recruit: { count: 2, toConflict: false } },
+    revealEffect: { optionalCost: { cost: { solari: 3 }, benefit: { recruit: { count: 2, toConflict: false }} } },
+    tags: ["Military", "Character", "Atreides"],
+  },
+  thufirHawat: {
+    id: "imp_thufir_hawat",
+    name: "Thufir Hawat",
+    cost: 4,
+    type: "Imperium",
+    agentIcons: ["Intrigue", "Any"],
+    agentEffectText: "Draw 1 card. You may trash a card from your hand.",
+    revealEffectText: "Gain 1 Persuasion.",
+    agentEffect: { draw: 1, custom: "thufir_optional_trash" },
+    revealEffect: { persuasion: 1 },
+    tags: ["Character", "Mentat", "Atreides"],
+  },
+  piterDeVries: {
+    id: "imp_piter_de_vries",
+    name: "Piter De Vries",
+    cost: 3,
+    type: "Imperium",
+    agentIcons: ["Intrigue", "Any"],
+    agentEffectText: "Draw 1 Intrigue card. Target opponent discards 1 random Intrigue card.",
+    revealEffectText: "Gain 1 Persuasion.",
+    agentEffect: { drawIntrigue: 1, custom: "piter_discard_intrigue", targetsOpponent: true, numTargets: 1, targetType: 'player' },
+    revealEffect: { persuasion: 1 },
+    tags: ["Character", "Mentat", "Harkonnen"],
   },
   theVoice: {
     id: "imp_the_voice",
@@ -146,15 +256,96 @@ export const IMPERIUM_CARDS = {
     cost: 4,
     type: "Imperium",
     agentIcons: ["Bene Gesserit", "Intrigue"],
-    agentEffectText: "Remove 1 troop from any player's garrison in any conflict sector (if multiple). OR Gain 2 Solari.", // Complex targeting
+    agentEffectText: "Remove 1 troop from any player's garrison in any conflict sector (if multiple). OR Gain 2 Solari.",
     revealEffectText: "Gain 1 Persuasion.",
-    agentEffect: { custom: "the_voice_agent" }, // Requires custom logic
+    agentEffect: { custom: "the_voice_agent", targetsOpponent: true, numTargets: 1 },
     revealEffect: { persuasion: 1 },
     tags: ["Bene Gesserit", "Intrigue"],
   },
+  beastRabban: {
+    id: "imp_beast_rabban",
+    name: "Beast Rabban",
+    cost: 5,
+    type: "Imperium",
+    agentIcons: ["Military", "Harkonnen"],
+    agentEffectText: "Deploy 2 troops to your garrison. Each opponent loses 1 Solari (if they have it).",
+    revealEffectText: "Gain 2 Swords.",
+    agentEffect: { recruit: { count: 2, toConflict: false }, custom: "beast_rabban_solari_loss" },
+    revealEffect: { persuasion: 0, swords: 2 },
+    tags: ["Military", "Character", "Harkonnen"],
+  },
+  mentatCard: {
+    id: "imp_mentat_card",
+    name: "Mentat Instruction",
+    cost: 4,
+    type: "Imperium",
+    agentIcons: ["Intrigue", "Any"],
+    agentEffectText: "Draw 2 cards.",
+    revealEffectText: "Gain 1 Persuasion.",
+    agentEffect: { draw: 2 },
+    revealEffect: { persuasion: 1 },
+    tags: ["Mentat", "Utility"],
+  },
+  personalShield: {
+    id: "imp_personal_shield",
+    name: "Personal Shield",
+    cost: 2,
+    type: "Imperium",
+    agentIcons: ["Tech", "Any"],
+    agentEffectText: "Gain 1 Solari.",
+    revealEffectText: "Gain 1 Sword.",
+    agentEffect: { resources: { solari: 1 }},
+    revealEffect: { persuasion: 0, swords: 1 },
+    tags: ["Tech", "Military"],
+  },
+
+
+  // --- RESERVE CARDS (purchasable from Imperium Row) ---
+  theSpiceMustFlow: {
+    id: "reserve_tsmf",
+    name: "The Spice Must Flow",
+    cost: 9,
+    type: "Imperium",
+    agentIcons: ["Any", "Any", "Any"],
+    agentEffectText: "This card typically has no agent effect; its value is its VP.",
+    revealEffectText: "Gain 1 VP.",
+    agentEffect: {},
+    revealEffect: { vp: 1 },
+    tags: ["Reserve", "VP"],
+    isReserveCard: true,
+    quantity: null,
+  },
+  arrakisLiaisonReserve: {
+    id: "reserve_arrakis_liaison",
+    name: "Arrakis Liaison (Reserve)",
+    cost: 2,
+    type: "Imperium",
+    agentIcons: ["Fremen", "City"],
+    agentEffectText: "Gain 1 influence with Fremen.",
+    revealEffectText: "Gain 2 Persuasion.",
+    agentEffect: { gainInfluence: { faction: "Fremen", amount: 1} },
+    revealEffect: { persuasion: 2 },
+    tags: ["Reserve", "Fremen"],
+    faction: "Fremen",
+    isReserveCard: true,
+    quantity: null,
+  },
 };
 
-// Function to get all defined Imperium cards as an array
+// --- SPECIAL CARD (Not in Imperium Deck, Gained from Location) ---
+export const FOLDSPACE_CARD_DEF = {
+    id: "special_foldspace",
+    name: "Foldspace",
+    type: "Special",
+    agentIcons: ["Spacing Guild", "Any"],
+    agentEffectText: "Treat this card as if its destination icons match any board space. Draw a card.",
+    revealEffectText: "Draw 1 card.",
+    agentEffect: { custom: "foldspace_agent_effect", draw: 1 },
+    revealEffect: { draw: 1 },
+    tags: ["Special", "Spacing Guild"],
+    cost: 0,
+};
+
 export const getAllImperiumCards = () => {
   return Object.values(IMPERIUM_CARDS);
 };
@@ -175,23 +366,57 @@ export const INTRIGUE_CARDS = {
     type: "Intrigue",
     intrigueType: "Combat",
     effectText: "Target opponent removes 2 troops from the conflict. If they have no troops in the conflict, they remove 2 troops from their garrison instead.",
-    effect: { custom: "decoy_effect" }, // Needs target selection
+    effect: { custom: "decoy_effect", targetsOpponent: true, numTargets: 1, targetType: 'player' },
   },
   poisonSnooper: {
     id: "intrigue_poison_snooper",
     name: "Poison Snooper",
     type: "Intrigue",
-    intrigueType: "Plot", // Can be played anytime to see hand, but effect is disruptive
+    intrigueType: "Plot",
     effectText: "Look at an opponent's hand. Choose 1 card for them to discard.",
-    effect: { custom: "poison_snooper_effect" }, // Needs target selection & card choice
+    effect: {
+      custom: "poison_snooper_effect",
+      targetsOpponent: true,
+      numTargets: 1,
+      targetType: 'player',
+      thenSelectCardFromTargetHand: true,
+      maxCardsToSelect: 1,
+      targetZone: 'hand'
+    },
   },
-  stilgar: { // Made this an intrigue for example, could be a leader or other card type
+  stilgar: {
     id: "intrigue_stilgar",
     name: "Stilgar's Cunning",
     type: "Intrigue",
     intrigueType: "Combat",
     effectText: "Deploy 2 troops to your garrison. Gain +2 Strength in the current conflict.",
     effect: { recruit: { count: 2, toConflict: false }, swords: 2 },
+  },
+  treachery: { // NEW
+    id: "intrigue_treachery",
+    name: "Treachery",
+    type: "Intrigue",
+    intrigueType: "Plot", // Or Combat, depending on when it's playable
+    effectText: "Choose an opponent. That player's swords provide 0 Strength this combat.",
+    effect: {
+      custom: "treachery_effect",
+      targetsOpponent: true,
+      numTargets: 1,
+      targetType: 'player'
+    },
+  },
+  poisonDart: { // NEW
+    id: "intrigue_poison_dart",
+    name: "Poison Dart",
+    type: "Intrigue",
+    intrigueType: "Combat",
+    effectText: "Target an opponent. Remove 1 of their troops from the conflict.",
+    effect: {
+      custom: "poison_dart_effect",
+      targetsOpponent: true,
+      numTargets: 1,
+      targetType: 'player'
+    }
   },
 
   // Plot
@@ -203,7 +428,7 @@ export const INTRIGUE_CARDS = {
     effectText: "Gain 2 Spice and 1 Influence with the Spacing Guild.",
     effect: { resources: { spice: 2 }, gainInfluence: { faction: "spacingGuild", amount: 1 } },
   },
-  secretsWithinSecrets: { // Renamed "Secrets" for flavor
+  secretsWithinSecrets: {
     id: "intrigue_secrets",
     name: "Secrets Within Secrets",
     type: "Intrigue",
@@ -217,7 +442,7 @@ export const INTRIGUE_CARDS = {
     type: "Intrigue",
     intrigueType: "Plot",
     effectText: "Choose one of your Agents on the board. That Agent is not recalled during the Recall Phase this round. (It remains on its board space.)",
-    effect: { custom: "bindu_suspension_effect" }, // Needs agent selection
+    effect: { custom: "bindu_suspension_effect" },
   },
   hiddenStash: {
     id: "intrigue_hidden_stash",
@@ -226,6 +451,45 @@ export const INTRIGUE_CARDS = {
     intrigueType: "Plot",
     effectText: "Gain 3 Solari.",
     effect: { resources: { solari: 3 } },
+  },
+  bribery: { // NEW
+    id: "intrigue_bribery",
+    name: "Bribery",
+    type: "Intrigue",
+    intrigueType: "Plot",
+    effectText: "You may pay 4 Solari to gain 2 influence with one faction of your choice.",
+    effect: {
+      optionalCost: {
+        cost: { solari: 4 },
+        benefit: { custom: "bribery_influence_gain" } // Custom to handle faction choice
+      }
+    }
+  },
+  blackmail: { // NEW
+    id: "intrigue_blackmail",
+    name: "Blackmail",
+    type: "Intrigue",
+    intrigueType: "Plot",
+    effectText: "Choose an opponent. That opponent must either give you 3 Solari or let you draw an Intrigue card.",
+    effect: {
+      custom: "blackmail_effect",
+      targetsOpponent: true,
+      numTargets: 1,
+      targetType: 'player',
+      targetChooses: true, // Indicates the targeted opponent makes a choice
+      // Options will be defined in the custom effect logic or pending decision setup
+    }
+  },
+  testOfHumanity: { // NEW
+    id: "intrigue_test_of_humanity",
+    name: "Test of Humanity",
+    type: "Intrigue",
+    intrigueType: "Plot",
+    effectText: "Each opponent chooses: Remove 1 troop from their garrison OR discard 1 random card from their hand.",
+    effect: {
+      custom: "test_of_humanity_effect",
+      // No specific target here, applies to all opponents for their choice
+    }
   },
 
   // Endgame
@@ -258,3 +522,5 @@ export const INTRIGUE_CARDS = {
 export const getAllIntrigueCards = () => {
   return Object.values(INTRIGUE_CARDS);
 };
+
+[end of src/games/dune-imperium/cards.js]
